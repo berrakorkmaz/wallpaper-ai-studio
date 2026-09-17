@@ -2,9 +2,9 @@
 
 Open-source workflow for generating wallpaper prompts, production masters, categorized mockups and Etsy-ready listing drafts.
 
-Wallpaper AI Studio turns a wallpaper idea into a controlled production workflow. The core application works without Etsy: prepare a seamless pattern or custom mural, compile a Midjourney-ready prompt, upload and inspect a Production Master, organize art direction, prepare six mockup roles, draft marketplace copy, and download the project as a ZIP.
+Wallpaper AI Studio turns a wallpaper idea into a controlled production workflow. The core application works without Etsy: prepare a seamless pattern or custom mural, compile a Midjourney-ready prompt, upload and validate an immutable Production Master, direct ten independent render jobs, prepare marketplace copy, and download focused or complete ZIP packages.
 
-> The included Etsy implementation is a safe mock adapter. It never calls Etsy and never publishes a listing. Bring your own Etsy application and server-side credentials when enabling the optional real adapter.
+> The public demo uses the clearly labeled development renderer. Its previews are not marked production-ready. A real mask/perspective/displacement compositing service must be connected for commercial scene renders. Etsy remains optional and draft-only.
 
 ## Features
 
@@ -13,9 +13,15 @@ Wallpaper AI Studio turns a wallpaper idea into a controlled production workflow
 - Mural ratios calculated from wall width and height
 - Automatic private project names that never become marketplace titles without explicit opt-in
 - Production Master and Marketing Mockup asset separation
-- Six independently renewable mockup roles
+- Immutable Production Master versions with upload, QA, failure, pass and approval states
+- File type, pixels, ratio, size, transparency, hash, repeat-edge and mural-safe-area QA
+- Six independently renewable mockup roles plus four listing-guide roles
+- Render jobs with ownership, idempotency, progress, retry metadata and master-version lineage
+- Explicit `RENDER_PROVIDER=mock` / `RENDER_PROVIDER=real` separation
 - Listing title, description and tag editor
-- Local ZIP export with prompts, metadata, master asset, mockup manifests and listing content
+- Actual 3000px JPEG development previews and original master download in the browser demo
+- Partial and complete ZIP exports containing actual assets, prompts, metadata and listing content
+- Expiring signed-download contract and user-specific storage paths
 - Adapter interfaces for marketplace, image generation, storage, authentication and export
 - Synthetic demo mode with no marketplace account or credentials
 - Multi-user schema and ownership-scoped repository queries
@@ -60,13 +66,19 @@ All values in `.env.example` are intentionally empty.
 | `ETSY_REDIRECT_URI` | Callback URL registered for this installation |
 | `STORAGE_PROVIDER` | Storage adapter name |
 | `STORAGE_BUCKET` | Private upload bucket |
+| `RENDER_PROVIDER` | `mock` or `real` |
+| `RENDER_SERVICE_URL` | Server-side mask/perspective compositing queue endpoint |
+| `RENDER_SERVICE_TOKEN` | Private service credential; never expose to the browser |
+| `EXPORT_SIGNING_SECRET` | Secret used to sign expiring download URLs |
+| `OUTPUT_LONG_EDGE` | Marketing image long edge; defaults to `3000` |
+| `OUTPUT_JPEG_QUALITY` | JPEG quality; defaults to `93` |
 | `DEMO_MODE` | `true` keeps all external calls mocked |
 
 Never prefix Etsy secrets with `NEXT_PUBLIC_`. Never expose tokens to the browser.
 
 ## Database setup
 
-The normalized multi-user schema is in `db/schema.ts`; the starter migration is in `drizzle/0000_wallpaper_ai_studio.sql`.
+The normalized multi-user schema is in `db/schema.ts`. Base tables are in `drizzle/0000_wallpaper_ai_studio.sql`; immutable master, render asset and export-job tables are added by `drizzle/0001_production_pipeline.sql`.
 
 ```bash
 npm run db:generate
@@ -120,16 +132,41 @@ npx vercel --prod
 
 The repository does not contain a real key, shared secret, token, shop ID, callback, or personal account data.
 
+## Render providers
+
+- `RENDER_PROVIDER=mock` uses the development renderer. It creates 3000px browser-downloadable previews but always records `productionReady=false`.
+- `RENDER_PROVIDER=real` calls the server-side adapter in `integrations/image-generation`. A valid result must be at least 3000px on its long edge, use JPG or PNG, and retain the approved master asset ID/hash.
+- The real provider receives a strict `mask-perspective-displacement-composite-only` source policy. It must not use generative image synthesis on the wallpaper artwork.
+
+The real renderer should operate through a queue and private object storage. Recommended building blocks are Cloudflare Queues + R2, AWS SQS + S3, or an equivalent worker and object-store combination. ImageMagick/libvips/OpenCV can implement masks, perspective transforms, displacement maps, controlled lighting and color-safe compositing.
+
+## Export packages
+
+The app supports Production Files, Mockups Only, Listing Images Only, Prompt Package, Listing Content and Complete Project ZIP. The complete archive is structured as:
+
+```text
+project-slug/
+  01-production-master/
+  02-mockups/
+  03-listing-guides/
+  04-prompts/
+  05-listing-content/
+  06-project-data/
+  README.txt
+```
+
+Only `repeat-map.jpg` is included for seamless projects and only `mural-map.jpg` for murals. Secret-like fields are stripped from JSON metadata. Production storage implementations must verify the authenticated session and ownership before issuing a short-lived signed download URL.
+
 ## Use without Etsy
 
-Keep `DEMO_MODE=true`. Every core step works locally, including prompt generation, upload/QA, art direction, mockup role preparation, listing copy and ZIP export. “Create demo draft” uses an in-memory mock and sends no network request.
+Keep `DEMO_MODE=true`. Prompt generation, upload/QA, art direction, development renders, listing copy and ZIP export work without Etsy. “Create Etsy Draft” remains disabled until a real server-side connection exists.
 
 ## Add an adapter
 
 Implement the relevant interface and inject it at the application boundary:
 
 - `MarketplaceAdapter`
-- `ImageGenerationAdapter`
+- `RenderAdapter`
 - `StorageAdapter`
 - `AuthAdapter`
 - `ExportAdapter`

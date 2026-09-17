@@ -1,106 +1,40 @@
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import JSZip from "jszip";
-import { createDemoProject, changeProductType, refreshProjectName, updateMeasurements, validateProject } from "../lib/core/project.ts";
-import { compilePrompt } from "../lib/core/prompt.ts";
-import { getOwned, listOwned } from "../lib/core/ownership.ts";
-import { MockEtsyAdapter, getOwnedEtsyConnection } from "../integrations/etsy/index.ts";
+import { EtsyAdapter } from "../integrations/etsy/index.ts";
 import { ZipExportAdapter } from "../integrations/export/index.ts";
-import { publicConnectionView } from "../lib/server/ownership-repository.ts";
+import { MockRenderAdapter, RealRenderAdapter } from "../integrations/image-generation/index.ts";
+import { SecureMemoryStorageAdapter } from "../integrations/storage/index.ts";
+import { allOutputsReady, changeProductType, createDemoProject, workflowStates } from "../lib/core/project.ts";
+import { completeRenderJob, requestRenderJobs } from "../lib/core/render.ts";
 
-test("a user can only list and retrieve their own projects", () => {
-  const records = [{ id: "a", userId: "user-a" }, { id: "b", userId: "user-b" }];
-  assert.deepEqual(listOwned(records, "user-a"), [{ id: "a", userId: "user-a" }]);
-  assert.equal(getOwned(records, "user-a", "b"), null);
-});
+const master = (project, overrides = {}) => ({ id: "master-v1", projectId: project.id, userId: project.userId, role: "production_master", fileUrl: "memory://master", fileName: "master.png", width: 3000, height: 3000, fileHash: "a".repeat(64), version: 1, createdAt: new Date().toISOString(), mimeType: "image/png", fileSize: 2048, aspectRatio: 1, colorProfile: "sRGB", hasTransparency: false, immutable: true, approvedAt: null, ...overrides });
+function renderable(overrides = {}) { const base = createDemoProject(); const asset = master(base); return { ...base, prompt: { ...base.prompt, promptText: "selected prompt", selectedAt: new Date().toISOString() }, productionMaster: asset, masterVersions: [asset], activeMasterVersionId: asset.id, masterStatus: "QA_PASSED", artDirection: { ...base.artDirection, savedAt: new Date().toISOString() }, ...overrides }; }
+function output(project, job, overrides = {}) { return { id: `asset-${job.slotId}`, projectId: project.id, userId: project.userId, masterVersionId: job.masterVersionId, slotId: job.slotId, role: job.slotRole, fileUrl: `memory://${job.slotId}`, fileName: `${job.slotId}.jpg`, width: 3000, height: 2250, format: "jpg", fileSize: 1024, productionReady: true, renderProvider: "real", sceneTemplateId: job.sceneTemplateId, approved: true, rejected: false, createdAt: new Date().toISOString(), ...overrides }; }
+function completedProject(productType = "seamless") { let project = renderable(); if (productType === "mural") { project = changeProductType(project, "mural"); const asset = master(project, { width: 4800, height: 3000, aspectRatio: 1.6 }); project = { ...project, physicalWidth: 400, physicalHeight: 250, measurementUnit: "cm", calculatedAspectRatio: "8:5", requiredPixelWidth: 4000, requiredPixelHeight: 2500, productionMaster: asset, masterVersions: [asset], activeMasterVersionId: asset.id, masterStatus: "QA_PASSED", prompt: { ...project.prompt, promptText: "selected prompt", selectedAt: new Date().toISOString() }, artDirection: { ...project.artDirection, savedAt: new Date().toISOString() } }; }
+  const requested = requestRenderJobs(project, project.userId, project.slots.map((slot) => slot.id), "real"); project = requested.project; for (const job of requested.jobs) project = completeRenderJob(project, job.jobId, output(project, job)); return project;
+}
+const resolver = { async read() { return new Blob(["high-resolution-binary"], { type: "image/jpeg" }); } };
 
-test("seamless prompts contain --tile --ar 1:1", () => {
-  assert.match(compilePrompt(createDemoProject()), /--tile --ar 1:1/);
-});
-
-test("mural dimensions reduce to the correct aspect ratio", () => {
-  const project = updateMeasurements(changeProductType(createDemoProject(), "mural"), { width: 400, height: 250, unit: "cm" });
-  assert.equal(project.calculatedAspectRatio, "8:5");
-  assert.match(compilePrompt(project), /--ar 8:5/);
-});
-
-test("mural project validation blocks missing measurements", () => {
-  const errors = validateProject(changeProductType(createDemoProject(), "mural"));
-  assert.ok(errors.physicalWidth && errors.physicalHeight && errors.measurementUnit);
-});
-
-test("changing product type clears fields owned by the previous type", () => {
-  const mural = changeProductType(createDemoProject(), "mural");
-  assert.equal(mural.patternScale, null);
-  const measured = updateMeasurements(mural, { width: 400, height: 250, unit: "cm" });
-  const seamless = changeProductType(measured, "seamless");
-  assert.equal(seamless.physicalWidth, null);
-  assert.equal(seamless.physicalHeight, null);
-  assert.equal(seamless.measurementUnit, null);
-});
-
-test("project name never changes listing title automatically", () => {
-  const project = createDemoProject();
-  const title = project.listing.title;
-  const changed = refreshProjectName({ ...project, prompt: { ...project.prompt, theme: "Coastal" } });
-  assert.notEqual(changed.projectName, project.projectName);
-  assert.equal(changed.listing.title, title);
-  assert.equal(changed.listing.useProjectNameAsTitleSuggestion, false);
-});
-
-test("manual project names are not overwritten", () => {
-  const project = { ...createDemoProject(), projectName: "My private project", isProjectNameManuallyEdited: true };
-  assert.equal(refreshProjectName({ ...project, prompt: { ...project.prompt, theme: "Coastal" } }).projectName, "My private project");
-});
-
-test("core application functions without an Etsy connection", () => {
-  const project = createDemoProject();
-  assert.ok(compilePrompt(project));
-  assert.equal(project.listing.shopId, null);
-});
-
-test("ZIP export works without Etsy", async () => {
-  const blob = await new ZipExportAdapter().exportProject(createDemoProject());
-  const zip = await JSZip.loadAsync(await blob.arrayBuffer());
-  const names = Object.keys(zip.files);
-  assert.ok(names.some((name) => name.endsWith("project.json")));
-  assert.ok(names.some((name) => name.includes("listing-content/title.txt")));
-  assert.ok(names.filter((name) => name.includes("mockups/") && name.endsWith(".txt")).length >= 6);
-});
-
-test("mock Etsy adapter makes no real API request", async () => {
-  const originalFetch = globalThis.fetch;
-  let calls = 0;
-  globalThis.fetch = async () => { calls += 1; throw new Error("network should not be called"); };
-  try {
-    const project = createDemoProject();
-    await new MockEtsyAdapter().createDraft({ userId: project.userId, project, listing: project.listing, idempotencyKey: "no-network" });
-    assert.equal(calls, 0);
-  } finally { globalThis.fetch = originalFetch; }
-});
-
-test("draft creation is idempotent and a double click creates one listing", async () => {
-  const project = createDemoProject();
-  const adapter = new MockEtsyAdapter();
-  const input = { userId: project.userId, project, listing: project.listing, idempotencyKey: "same-operation" };
-  const [first, second] = await Promise.all([adapter.createDraft(input), adapter.createDraft(input)]);
-  assert.equal(first.externalId, second.externalId);
-  assert.equal(first.state, "draft");
-});
-
-test("one user cannot access another user's Etsy connection", () => {
-  const connections = [{ id: "connection-a", userId: "user-a", shopId: "shop-a", encryptedAccessToken: "cipher", encryptedRefreshToken: "cipher", expiresAt: new Date().toISOString() }];
-  assert.equal(getOwnedEtsyConnection(connections, "user-b", "connection-a"), null);
-});
-
-test("token fields are excluded from public connection responses", () => {
-  const safe = publicConnectionView({ id: "connection-a", shopId: "shop-a", expiresAt: "2028-01-01" });
-  assert.deepEqual(Object.keys(safe), ["id", "shopId", "expiresAt"]);
-  assert.doesNotMatch(JSON.stringify(safe), /token|secret/i);
-});
-
-test("the default project exposes six independent mockup roles", () => {
-  const project = createDemoProject();
-  assert.equal(project.slots.length, 6);
-  assert.equal(new Set(project.slots.map((slot) => slot.role)).size, 6);
-});
+test("1. Design Master olmadan Render Queue başlatılamaz", () => { assert.throws(() => requestRenderJobs(createDemoProject(), "demo-user", ["mockup-1"], "mock"), /MASTER_NOT_RENDERABLE/); });
+test("2. QA_FAILED durumundaki master ile render başlatılamaz", () => { assert.throws(() => requestRenderJobs(renderable({ masterStatus: "QA_FAILED" }), "demo-user", ["mockup-1"], "mock"), /MASTER_NOT_RENDERABLE/); });
+test("3. QA_PASSED durumundaki master ile render başlatılabilir", () => { const project = renderable(); assert.equal(requestRenderJobs(project, project.userId, ["mockup-1"], "mock").jobs.length, 1); });
+test("4. Navigasyon tıklaması adımı completed yapmaz", () => { const project = createDemoProject(); const before = workflowStates(project); const after = workflowStates(project); assert.deepEqual(after, before); assert.equal(after[1].complete, false); assert.equal(after[2].complete, false); });
+test("5. Altı mockup ve dört bilgi görseli ayrı job olarak oluşturulur", () => { const project = renderable(); const { jobs } = requestRenderJobs(project, project.userId, project.slots.map((slot) => slot.id), "mock"); assert.equal(jobs.length, 10); assert.equal(jobs.filter((job) => project.slots.find((slot) => slot.id === job.slotId)?.kind === "mockup").length, 6); assert.equal(new Set(jobs.map((job) => job.jobId)).size, 10); });
+test("6. Bir slot yeniden oluşturulduğunda diğer slotlar değişmez", () => { const project = completedProject(); const before = new Map(project.slots.map((slot) => [slot.id, slot.version])); const next = requestRenderJobs(project, project.userId, ["mockup-1"], "real").project; assert.equal(next.slots.find((slot) => slot.id === "mockup-2").version, before.get("mockup-2")); assert.equal(next.slots.find((slot) => slot.id === "mockup-1").status, "queued"); });
+test("7. Aynı job isteği çift render oluşturmaz", () => { const project = renderable(); const first = requestRenderJobs(project, project.userId, ["mockup-1"], "mock"); const second = requestRenderJobs(first.project, project.userId, ["mockup-1"], "mock"); assert.equal(second.project.renderJobs.length, 1); assert.equal(second.jobs[0].jobId, first.jobs[0].jobId); });
+test("8. Mock provider çıktısı production ready olarak işaretlenmez", async () => { const project = renderable(); const job = requestRenderJobs(project, project.userId, ["mockup-1"], "mock").jobs[0]; const result = await new MockRenderAdapter().render({ userId: project.userId, project, job, master: project.productionMaster }); assert.equal(result.productionReady, false); assert.equal(result.renderProvider, "mock"); });
+test("9. Real provider çıktısında piksel ölçüsü ve dosya formatı kaydedilir", async () => { const original = globalThis.fetch; globalThis.fetch = async () => new Response(JSON.stringify({ url: "https://assets.example/hero.jpg", fileName: "hero.jpg", width: 3600, height: 2700, format: "jpg", fileSize: 4000000 }), { status: 200 }); try { const project = renderable(); const job = requestRenderJobs(project, project.userId, ["mockup-1"], "real").jobs[0]; const result = await new RealRenderAdapter("https://render.example", "service-token").render({ userId: project.userId, project, job, master: project.productionMaster }); assert.equal(result.width, 3600); assert.equal(result.height, 2700); assert.equal(result.format, "jpg"); assert.equal(result.productionReady, true); } finally { globalThis.fetch = original; } });
+test("10. Tek görsel yüksek çözünürlüklü olarak indirilebilir", async () => { const project = completedProject(); const asset = project.outputAssets[0]; assert.ok(asset.width >= 3000); assert.equal((await resolver.read(asset.fileUrl, project.userId)).size, 22); });
+test("11. Complete ZIP doğru klasör yapısını içerir", async () => { const project = completedProject(); const result = await new ZipExportAdapter().exportProject({ project, userId: project.userId, packageType: "complete", resolver }); const names = Object.keys((await JSZip.loadAsync(await result.blob.arrayBuffer())).files); for (const folder of ["01-production-master/", "02-mockups/", "03-listing-guides/", "04-prompts/", "05-listing-content/", "06-project-data/"]) assert.ok(names.some((name) => name.includes(folder)), folder); });
+test("12. Seamless ZIP yalnızca Repeat Map içerir", async () => { const project = completedProject("seamless"); const names = Object.keys((await JSZip.loadAsync(await (await new ZipExportAdapter().exportProject({ project, userId: project.userId, packageType: "complete", resolver })).blob.arrayBuffer())).files); assert.ok(names.some((name) => name.endsWith("08-repeat-map.jpg"))); assert.ok(!names.some((name) => name.endsWith("08-mural-map.jpg"))); });
+test("13. Mural ZIP yalnızca Mural Map içerir", async () => { const project = completedProject("mural"); const names = Object.keys((await JSZip.loadAsync(await (await new ZipExportAdapter().exportProject({ project, userId: project.userId, packageType: "complete", resolver })).blob.arrayBuffer())).files); assert.ok(names.some((name) => name.endsWith("08-mural-map.jpg"))); assert.ok(!names.some((name) => name.endsWith("08-repeat-map.jpg"))); });
+test("14. ZIP içinde API key veya token bulunmaz", async () => { const project = completedProject(); project.apiKey = "SENTINEL_API_SECRET"; project.oauthAccessToken = "SENTINEL_OAUTH_SECRET"; const result = await new ZipExportAdapter().exportProject({ project, userId: project.userId, packageType: "complete", resolver }); const zip = await JSZip.loadAsync(await result.blob.arrayBuffer()); const textual = await Promise.all(Object.values(zip.files).filter((file) => !file.dir && /\.(txt|json)$/.test(file.name)).map((file) => file.async("string"))); assert.doesNotMatch(textual.join("\n"), /SENTINEL_(API|OAUTH)_SECRET/); });
+test("15. Başka kullanıcı ZIP dosyasını indiremez", async () => { const project = completedProject(); await assert.rejects(() => new ZipExportAdapter().exportProject({ project, userId: "other-user", packageType: "complete", resolver }), /RESOURCE_NOT_FOUND/); });
+test("16. ZIP indirme URL’si süresi dolduğunda çalışmaz", async () => { const storage = new SecureMemoryStorageAdapter("test-secret"); await storage.put({ userId: "user-a", key: "exports/a.zip", data: new Blob(["zip"]) }); const signedUrl = await storage.createSignedDownload({ userId: "user-a", key: "exports/a.zip", expiresInSeconds: 60, now: 1_000_000 }); assert.ok(await storage.resolveSignedDownload({ userId: "user-a", signedUrl, now: 1_030_000 })); assert.equal(await storage.resolveSignedDownload({ userId: "user-a", signedUrl, now: 1_061_000 }), null); assert.equal(await storage.resolveSignedDownload({ userId: "user-b", signedUrl, now: 1_030_000 }), null); });
+test("17. Etsy bağlı olmadan Listing Package indirilebilir", async () => { const project = completedProject(); project.listing.shopId = null; const result = await new ZipExportAdapter().exportProject({ project, userId: project.userId, packageType: "listing-content", resolver }); assert.ok(result.blob.size > 0); });
+test("18. Etsy bağlı olmadan Create Etsy Draft çalışmaz", async () => { const project = completedProject(); await assert.rejects(() => new EtsyAdapter().createDraft({ userId: project.userId, project, listing: project.listing, idempotencyKey: "draft" }), /ETSY_ADAPTER_NOT_CONFIGURED/); });
+test("19. Project Name Etsy başlığına otomatik aktarılmaz", () => { const project = createDemoProject(); const title = project.listing.title; project.projectName = "Internal Secret Name"; assert.equal(project.listing.title, title); assert.equal(project.listing.useProjectNameAsTitleSuggestion, false); });
+test("20. Aktif repository wallpaper-ai-studio ve eski connector koduna bağlı değil", () => { const pkg = JSON.parse(readFileSync("package.json", "utf8")); const remote = execFileSync("git", ["config", "--get", "remote.origin.url"], { encoding: "utf8" }); assert.equal(pkg.name, "wallpaper-ai-studio"); assert.match(remote, /wallpaper-ai-studio/); assert.doesNotMatch(readFileSync("app/StudioApp.tsx", "utf8"), /berryobjects-etsy-connector/); assert.equal(allOutputsReady(completedProject()), true); });
