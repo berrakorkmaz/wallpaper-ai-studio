@@ -3,7 +3,7 @@ import { canRender } from "./project.ts";
 
 const sceneSlug = (value: string) => value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 export function sceneTemplateFor(project: Project, slot: RenderSlot) {
-  const room = slot.role === "Secondary Setting" ? (project.artDirection.secondaryTargetRoom || "Editorial Room") : project.artDirection.primaryTargetRoom;
+  const room = slot.role === "Alternate room" ? (project.artDirection.secondaryTargetRoom || "Editorial Room") : project.artDirection.primaryTargetRoom;
   return `${sceneSlug(project.artDirection.collection)}--${sceneSlug(project.artDirection.mood)}--${sceneSlug(room)}--${sceneSlug(slot.role)}`;
 }
 

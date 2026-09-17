@@ -2,7 +2,7 @@
 
 Open-source workflow for generating wallpaper prompts, production masters, categorized mockups and Etsy-ready listing drafts.
 
-Wallpaper AI Studio turns a wallpaper idea into a controlled production workflow. The core application works without Etsy: prepare a seamless pattern or custom mural, compile a Midjourney-ready prompt, upload and validate an immutable Production Master, direct ten independent render jobs, prepare marketplace copy, and download focused or complete ZIP packages.
+Wallpaper AI Studio turns one uploaded wallpaper artwork into a controlled Etsy mockup workflow. The core application works without Etsy: choose a seamless pattern or custom mural, upload and validate immutable source artwork, direct six independent room mockups, prepare marketplace copy, and download focused or complete ZIP packages. Prompt Studio remains optional.
 
 > The public demo uses the clearly labeled development renderer. Its previews are not marked production-ready. A real mask/perspective/displacement compositing service must be connected for commercial scene renders. Etsy remains optional and draft-only.
 
@@ -13,16 +13,16 @@ Wallpaper AI Studio turns a wallpaper idea into a controlled production workflow
 - `artworkSource` tracking for generated prompts, user uploads, imports and other sources
 - PNG, JPEG, WEBP and TIFF master intake (TIFF requires a server-side decoder when the browser cannot preview it)
 - Seamless prompts with `--tile --ar 1:1`
-- Mural ratios calculated from wall width and height
+- Mural aspect ratio detected from the uploaded artwork with Smart Fit, no stretching and optional focal-point placement
 - Automatic private project names that never become marketplace titles without explicit opt-in
-- Production Master and Marketing Mockup asset separation
+- Source Artwork and Mockup Output asset separation
 - Immutable Production Master versions with upload, QA, failure, pass and approval states
 - File type, pixels, ratio, size, transparency, hash, repeat-edge and mural-safe-area QA
-- Six independently renewable mockup roles plus four listing-guide roles
+- Six independently renewable mockup roles: Hero room, Alternate room, Close-up detail, Wide room view, Styled room view and Clean wall presentation
 - Render jobs with ownership, idempotency, progress, retry metadata and master-version lineage
 - Explicit `RENDER_PROVIDER=mock` / `RENDER_PROVIDER=real` separation
 - Listing title, description and tag editor
-- Actual 3000px JPEG development previews and original master download in the browser demo
+- Central `ETSY_MOCKUP_SQUARE` profile: 3000 × 3000 JPG, sRGB, quality 92, no watermark, English labels
 - Partial and complete ZIP exports containing actual assets, prompts, metadata and listing content
 - Expiring signed-download contract and user-specific storage paths
 - Adapter interfaces for marketplace, image generation, storage, authentication and export
@@ -73,7 +73,9 @@ All values in `.env.example` are intentionally empty.
 | `RENDER_SERVICE_URL` | Server-side mask/perspective compositing queue endpoint |
 | `RENDER_SERVICE_TOKEN` | Private service credential; never expose to the browser |
 | `EXPORT_SIGNING_SECRET` | Secret used to sign expiring download URLs |
-| `OUTPUT_LONG_EDGE` | Marketing image long edge; defaults to `3000` |
+| `OUTPUT_PROFILE` | Central output profile; defaults to `ETSY_MOCKUP_SQUARE` |
+| `FAL_KEY` | Server-only Fal.ai credential |
+| `FAL_MODEL` | Fal.ai scene-generation model used before source-preserving compositing |
 | `OUTPUT_JPEG_QUALITY` | JPEG quality; defaults to `93` |
 | `DEMO_MODE` | `true` keeps all external calls mocked |
 
@@ -137,8 +139,8 @@ The repository does not contain a real key, shared secret, token, shop ID, callb
 
 ## Render providers
 
-- `RENDER_PROVIDER=mock` uses the development renderer. It creates 3000px browser-downloadable previews but always records `productionReady=false`.
-- `RENDER_PROVIDER=real` calls the server-side adapter in `integrations/image-generation`. A valid result must be at least 3000px on its long edge, use JPG or PNG, and retain the approved master asset ID/hash.
+- `RENDER_PROVIDER=mock` uses the development renderer. It creates 3000 × 3000 browser-downloadable previews but always records `productionReady=false`.
+- `RENDER_PROVIDER=real` calls the server-side scene/compositing adapter in `integrations/image-generation`. A valid result must match the central 3000 × 3000 JPG profile and retain the approved source asset ID/hash.
 - The real provider receives a strict `mask-perspective-displacement-composite-only` source policy. It must not use generative image synthesis on the wallpaper artwork.
 
 The real renderer should operate through a queue and private object storage. Recommended building blocks are Cloudflare Queues + R2, AWS SQS + S3, or an equivalent worker and object-store combination. ImageMagick/libvips/OpenCV can implement masks, perspective transforms, displacement maps, controlled lighting and color-safe compositing.
@@ -158,7 +160,7 @@ project-slug/
   README.txt
 ```
 
-Only `repeat-map.jpg` is included for seamless projects and only `mural-map.jpg` for murals. Secret-like fields are stripped from JSON metadata. Production storage implementations must verify the authenticated session and ownership before issuing a short-lived signed download URL.
+Secret-like fields are stripped from JSON metadata. Production storage implementations must verify the authenticated session and ownership before issuing a short-lived signed download URL. Physical print sizing remains isolated behind `lib/print-production` and is disabled in the active mockup product.
 
 When `artworkSource=user_upload`, the Prompt Studio step is recorded as `Skipped · Artwork provided`. No empty prompt or Design DNA files are added to the ZIP; `project.json` records `Artwork source: User upload`. Promptless projects continue through QA, Art Direction, rendering, listing export and optional Etsy draft creation normally.
 

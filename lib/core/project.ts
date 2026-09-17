@@ -1,15 +1,13 @@
-import type { ArtworkSource, PatternScale, ProductType, Project, RenderSlot, SlotRole, WorkflowState } from "./types.ts";
-import { calculateAspectRatio, calculateRequiredPixels } from "./ratio.ts";
+import type { ArtworkSource, PatternScale, ProductType, Project, RenderSlot, WorkflowState } from "./types.ts";
 
-export const MOCKUP_ROLES = ["Hero", "Lifestyle", "Alternate Angle", "Secondary Setting", "Close-up", "Wide Shot"] as const;
+export const MOCKUP_ROLES = ["Hero room", "Alternate room", "Close-up detail", "Wide room view", "Styled room view", "Clean wall presentation"] as const;
 export const GUIDE_ROLES = ["Clean Design", "Repeat Map", "Size Information", "Order Guide"] as const;
 
 function makeId(prefix: string) { return `${prefix}-${crypto.randomUUID()}`; }
 function productLabel(productType: ProductType) { return productType === "seamless" ? "Seamless" : "Mural"; }
 function makeSlots(productType: ProductType): RenderSlot[] {
-  const guides: SlotRole[] = ["Clean Design", productType === "seamless" ? "Repeat Map" : "Mural Map", "Size Information", "Order Guide"];
-  return [...MOCKUP_ROLES.map((role, index) => ({ id: `mockup-${index + 1}`, role, kind: "mockup" as const, status: "idle" as const, version: 0, activeJobId: null, outputAssetId: null, required: true })),
-    ...guides.map((role, index) => ({ id: `guide-${index + 1}`, role, kind: "guide" as const, status: "idle" as const, version: 0, activeJobId: null, outputAssetId: null, required: true }))];
+  void productType;
+  return MOCKUP_ROLES.map((role, index) => ({ id: `mockup-${index + 1}`, role, kind: "mockup" as const, status: "idle" as const, version: 0, activeJobId: null, outputAssetId: null, required: true }));
 }
 
 export function generateProjectName(input: { theme?: string; productType: ProductType; primaryTargetRoom?: string; sequenceNumber: number; generatedAt: string }) {
@@ -31,7 +29,7 @@ export function createDemoProject(userId = "demo-user", sequenceNumber = 1): Pro
   const projectName = generateProjectName({ theme: prompt.theme, productType: "seamless", primaryTargetRoom: "Nursery", sequenceNumber, generatedAt: now });
   const recommendation = { collection: "Baby & Nursery", mood: "Soft & airy", patternScale: "medium" as PatternScale, colorPalette: ["#70806a", "#d7c7a5", "#8f6b4d"], suggestedRooms: ["Nursery", "Kids Room"], reason: "Nursery intent and woodland motifs" };
   return { id, userId, projectName, projectSequenceNumber: sequenceNumber, isProjectNameManuallyEdited: false, projectNameGeneratedAt: now,
-    productType: "seamless", artworkSource: "other", primaryTargetRoom: "Nursery", secondaryTargetRoom: "Kids Room", patternScale: "medium", physicalWidth: null, physicalHeight: null, measurementUnit: null, calculatedAspectRatio: "1:1", targetPrintPpi: 150, requiredPixelWidth: 3000, requiredPixelHeight: 3000, createdAt: now, updatedAt: now, prompt,
+    productType: "seamless", artworkSource: "other", primaryTargetRoom: "Nursery", secondaryTargetRoom: "Kids Room", patternScale: "medium", artworkPlacementMode: "smart_fit", focalPoint: { x: 50, y: 50 }, physicalWidth: null, physicalHeight: null, measurementUnit: null, calculatedAspectRatio: "1:1", targetPrintPpi: 150, requiredPixelWidth: 3000, requiredPixelHeight: 3000, createdAt: now, updatedAt: now, prompt,
     masterStatus: "AWAITING_UPLOAD", masterVersions: [], activeMasterVersionId: null, productionMaster: null,
     qa: { status: "AWAITING_UPLOAD", score: 0, checks: [], requiredWidth: 3000, requiredHeight: 3000, missingWidth: 3000, missingHeight: 3000, upscaleRequired: true },
     artworkAnalysis: null, artDirection: { collection: recommendation.collection, mood: recommendation.mood, patternScale: recommendation.patternScale, primaryTargetRoom: "Nursery", secondaryTargetRoom: "Kids Room", colorPalette: recommendation.colorPalette, recommendation, userOverridden: false, savedAt: null },
@@ -43,19 +41,14 @@ export function changeProductType(project: Project, productType: ProductType): P
   return refreshProjectName({ ...project, productType, patternScale: null, physicalWidth: null, physicalHeight: null, measurementUnit: null, calculatedAspectRatio: productType === "seamless" ? "1:1" : "", requiredPixelWidth: productType === "seamless" ? 3000 : 0, requiredPixelHeight: productType === "seamless" ? 3000 : 0, prompt: { ...project.prompt, aspectRatio: productType === "seamless" ? "1:1" : "" }, masterStatus: "AWAITING_UPLOAD", masterVersions: [], activeMasterVersionId: null, productionMaster: null, slots: makeSlots(productType), renderJobs: [], outputAssets: [] });
 }
 
-export function updateMeasurements(project: Project, patch: { width?: number | null; height?: number | null; unit?: "cm" | "inch" | null }): Project {
-  const physicalWidth = patch.width === undefined ? project.physicalWidth : patch.width; const physicalHeight = patch.height === undefined ? project.physicalHeight : patch.height; const measurementUnit = patch.unit === undefined ? project.measurementUnit : patch.unit; const calculatedAspectRatio = calculateAspectRatio(physicalWidth, physicalHeight);
-  return { ...project, physicalWidth, physicalHeight, measurementUnit, calculatedAspectRatio, requiredPixelWidth: calculateRequiredPixels(physicalWidth, measurementUnit, project.targetPrintPpi), requiredPixelHeight: calculateRequiredPixels(physicalHeight, measurementUnit, project.targetPrintPpi), prompt: { ...project.prompt, aspectRatio: calculatedAspectRatio } };
-}
-
-export function validateProject(project: Project) { const errors: Record<string, string> = {}; if (!project.primaryTargetRoom) errors.primaryTargetRoom = "Select a primary target room."; if (project.productType === "seamless" && !project.patternScale) errors.patternScale = "Select a pattern scale."; if (project.productType === "mural") { if (!project.physicalWidth || project.physicalWidth <= 0) errors.physicalWidth = "Enter the wall width."; if (!project.physicalHeight || project.physicalHeight <= 0) errors.physicalHeight = "Enter the wall height."; if (!project.measurementUnit) errors.measurementUnit = "Select a measurement unit."; } return errors; }
+export function validateProject(project: Project) { const errors: Record<string, string> = {}; if (!project.productType) errors.productType = "Select a product type."; if (!project.primaryTargetRoom) errors.primaryTargetRoom = "Select a primary target room."; if (project.productType === "seamless" && !project.patternScale) errors.patternScale = "Select a pattern scale."; if (!project.productionMaster) errors.productionMaster = "Upload your source artwork."; return errors; }
 export function setPatternScale(project: Project, patternScale: PatternScale): Project { return { ...project, patternScale, artDirection: { ...project.artDirection, patternScale, userOverridden: true } }; }
 export function selectArtworkSource(project: Project, artworkSource: ArtworkSource): Project {
   const prompt = artworkSource === "user_upload" ? { ...project.prompt, promptText: "", selectedAt: null } : project.prompt;
   return { ...project, artworkSource, prompt };
 }
 export function canRender(project: Project) { return project.masterStatus === "QA_PASSED" || project.masterStatus === "APPROVED"; }
-export function allOutputsReady(project: Project) { return project.slots.length === 10 && project.slots.every((slot) => slot.status === "ready" && Boolean(slot.outputAssetId)); }
+export function allOutputsReady(project: Project) { return project.slots.length > 0 && project.slots.every((slot) => slot.status === "ready" && Boolean(slot.outputAssetId)); }
 export function allOutputsApproved(project: Project) { return allOutputsReady(project) && project.outputAssets.filter((asset) => project.slots.some((slot) => slot.outputAssetId === asset.id)).every((asset) => asset.approved); }
 
 export function workflowStates(project: Project): WorkflowState[] {
@@ -72,7 +65,7 @@ export function workflowStates(project: Project): WorkflowState[] {
     { complete: promptComplete, skipped: promptSkipped, label: "Prompt Studio", detail: promptSkipped ? "Skipped · Artwork provided" : "A prompt generated and selected" },
     { complete: masterComplete, skipped: false, label: "Design Master", detail: "Upload passed QA" },
     { complete: directionComplete, skipped: false, label: "Art Direction", detail: "Collection, mood and scale saved" },
-    { complete: renderComplete, skipped: false, label: "Render Queue", detail: "10 outputs ready and approved" },
+    { complete: renderComplete, skipped: false, label: "Render Queue", detail: "Mockup outputs ready and approved" },
     { complete: listingComplete, skipped: false, label: "Listing Studio", detail: "Listing exported or drafted" },
   ];
 }

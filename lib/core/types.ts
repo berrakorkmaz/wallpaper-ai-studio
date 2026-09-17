@@ -2,11 +2,12 @@ export type ProductType = "seamless" | "mural";
 export type PatternScale = "small" | "medium" | "large";
 export type MeasurementUnit = "cm" | "inch";
 export type ArtworkSource = "generated_prompt" | "user_upload" | "imported" | "other";
+export type ArtworkPlacementMode = "smart_fit" | "show_full" | "fill_wall" | "focal_point";
 export type MasterStatus = "AWAITING_UPLOAD" | "UPLOADED" | "QA_RUNNING" | "QA_FAILED" | "QA_PASSED" | "APPROVED";
 export type RenderProvider = "mock" | "real";
 export type RenderJobStatus = "QUEUED" | "PREPARING" | "RENDERING" | "READY" | "FAILED" | "RETRYING" | "CANCELLED";
 export type ExportJobStatus = "QUEUED" | "COLLECTING_FILES" | "CREATING_ARCHIVE" | "READY" | "FAILED" | "EXPIRED";
-export type MockupRole = "Hero" | "Lifestyle" | "Alternate Angle" | "Secondary Setting" | "Close-up" | "Wide Shot";
+export type MockupRole = "Hero room" | "Alternate room" | "Close-up detail" | "Wide room view" | "Styled room view" | "Clean wall presentation";
 export type GuideRole = "Clean Design" | "Repeat Map" | "Mural Map" | "Size Information" | "Order Guide";
 export type SlotRole = MockupRole | GuideRole;
 export type SlotKind = "mockup" | "guide";
@@ -71,11 +72,12 @@ export type ArtDirection = {
   recommendation: { collection: string; mood: string; patternScale: PatternScale | null; colorPalette: string[]; suggestedRooms: string[]; reason: string }; userOverridden: boolean; savedAt: string | null;
 };
 
-export type ArtworkAnalysis = { dominantColors: string[]; averageLuminance: number; averageSaturation: number; analyzedAt: string; source: "browser" | "service" };
+export type ArtworkAnalysis = { dominantColors: string[]; averageLuminance: number; averageSaturation: number; analyzedAt: string; source: "browser" | "service"; edgeMetrics?: { horizontal: number; vertical: number; motifCutRisk: boolean } };
 
 export type Project = {
   id: string; userId: string; projectName: string; projectSequenceNumber: number; isProjectNameManuallyEdited: boolean; projectNameGeneratedAt: string;
   productType: ProductType; artworkSource: ArtworkSource; primaryTargetRoom: string; secondaryTargetRoom: string; patternScale: PatternScale | null;
+  artworkPlacementMode: ArtworkPlacementMode; focalPoint: { x: number; y: number };
   physicalWidth: number | null; physicalHeight: number | null; measurementUnit: MeasurementUnit | null; calculatedAspectRatio: string;
   targetPrintPpi: number; requiredPixelWidth: number; requiredPixelHeight: number; createdAt: string; updatedAt: string;
   prompt: PromptSpec; masterStatus: MasterStatus; masterVersions: DesignAsset[]; activeMasterVersionId: string | null;

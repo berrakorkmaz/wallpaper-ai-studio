@@ -1,13 +1,14 @@
 import JSZip from "jszip";
 import type { ExportJob, OutputAsset, Project } from "../../lib/core/types.ts";
+import { DEFAULT_OUTPUT_PROFILE } from "../../lib/core/output-profiles.ts";
 
 export type ExportPackageType = ExportJob["packageType"];
 export interface AssetResolver { read(url: string, userId: string): Promise<Blob | null>; }
-export interface ExportAdapter { exportProject(input: { project: Project; userId: string; packageType: ExportPackageType; resolver?: AssetResolver }): Promise<{ blob: Blob; job: ExportJob; fileNames: string[] }>; }
+export interface ExportAdapter { exportProject(input: { project: Project; userId: string; packageType: ExportPackageType; resolver?: AssetResolver; assetIds?: string[] }): Promise<{ blob: Blob; job: ExportJob; fileNames: string[] }>; }
 
 const safe = (value: string) => value.toLowerCase().normalize("NFKD").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "wallpaper-project";
 const defaultResolver: AssetResolver = { async read(url) { try { const response = await fetch(url); return response.ok ? response.blob() : null; } catch { return null; } } };
-const mockupNames: Record<string, string> = { Hero: "01-hero.jpg", Lifestyle: "02-lifestyle.jpg", "Alternate Angle": "03-alternate-angle.jpg", "Secondary Setting": "04-secondary-setting.jpg", "Close-up": "05-close-up.jpg", "Wide Shot": "06-wide-shot.jpg" };
+const mockupNames: Record<string, string> = { "Hero room": "01-hero-room.jpg", "Alternate room": "02-alternate-room.jpg", "Close-up detail": "03-close-up-detail.jpg", "Wide room view": "04-wide-room-view.jpg", "Styled room view": "05-styled-room-view.jpg", "Clean wall presentation": "06-clean-wall-presentation.jpg" };
 const guideNames: Record<string, string> = { "Clean Design": "07-clean-design.jpg", "Repeat Map": "08-repeat-map.jpg", "Mural Map": "08-mural-map.jpg", "Size Information": "09-size-information.jpg", "Order Guide": "10-order-guide.jpg" };
 
 function stripSecrets(value: unknown): unknown {
@@ -27,7 +28,7 @@ async function addAsset(folder: JSZip, name: string, asset: OutputAsset, resolve
 }
 
 export class ZipExportAdapter implements ExportAdapter {
-  async exportProject(input: { project: Project; userId: string; packageType: ExportPackageType; resolver?: AssetResolver }) {
+  async exportProject(input: { project: Project; userId: string; packageType: ExportPackageType; resolver?: AssetResolver; assetIds?: string[] }) {
     const { project, userId, packageType } = input; if (project.userId !== userId) throw new Error("RESOURCE_NOT_FOUND");
     const now = new Date().toISOString(); const idempotencyKey = `${userId}:${project.id}:${packageType}:${project.activeMasterVersionId || "none"}`;
     const job: ExportJob = { id: `export-${crypto.randomUUID()}`, projectId: project.id, userId, packageType, status: "COLLECTING_FILES", idempotencyKey, storageKey: null, signedDownloadUrl: null, expiresAt: null, createdAt: now, completedAt: null, errorCode: null };
@@ -40,7 +41,7 @@ export class ZipExportAdapter implements ExportAdapter {
       production.file("master-preview.jpg", await original.arrayBuffer());
       production.file("master-metadata.json", JSON.stringify({ ...master, fileUrl: "[asset omitted]" }, null, 2));
     }
-    const approved = project.outputAssets.filter((asset) => asset.approved && project.slots.some((slot) => slot.outputAssetId === asset.id));
+    const approved = project.outputAssets.filter((asset) => asset.approved && project.slots.some((slot) => slot.outputAssetId === asset.id) && (!input.assetIds || input.assetIds.includes(asset.id)));
     if (include("mockups") || include("listing-images")) {
       const mockups = include("mockups") ? root.folder("02-mockups")! : null; const listing = include("listing-images") ? root.folder("02-listing-images")! : null;
       for (const asset of approved.filter((item) => mockupNames[item.role])) { if (mockups) await addAsset(mockups, mockupNames[asset.role], asset, resolver, userId); if (listing) await addAsset(listing, mockupNames[asset.role], asset, resolver, userId); }
@@ -51,8 +52,8 @@ export class ZipExportAdapter implements ExportAdapter {
     }
     if (include("prompts") && project.artworkSource === "generated_prompt" && project.prompt.promptText.trim()) { const prompts = root.folder("04-prompts")!; prompts.file("midjourney-prompt.txt", project.prompt.promptText); prompts.file("design-dna.json", JSON.stringify({ theme: project.prompt.theme, style: project.prompt.style, palette: project.prompt.palette, motifs: project.prompt.motifs }, null, 2)); prompts.file("prompt-parameters.json", JSON.stringify(project.prompt.parameters, null, 2)); prompts.file("variation-history.json", "[]"); }
     if (include("listing-content")) { const listing = root.folder("05-listing-content")!; listing.file("etsy-title.txt", project.listing.title); listing.file("etsy-description.txt", project.listing.description); listing.file("etsy-tags.txt", project.listing.tags.join("\n")); listing.file("listing-data.json", JSON.stringify(project.listing, null, 2)); }
-    if (packageType === "complete") { const data = root.folder("06-project-data")!; data.file("project.json", JSON.stringify(safeProject(project), null, 2)); data.file("art-direction.json", JSON.stringify(project.artDirection, null, 2)); data.file("size-profile.json", JSON.stringify({ productType: project.productType, physicalWidth: project.physicalWidth, physicalHeight: project.physicalHeight, unit: project.measurementUnit, targetPrintPpi: project.targetPrintPpi, requiredPixelWidth: project.requiredPixelWidth, requiredPixelHeight: project.requiredPixelHeight }, null, 2)); data.file("asset-manifest.json", JSON.stringify(approved.map(omitFileUrl), null, 2)); }
-    root.file("README.txt", "Wallpaper AI Studio export\nProduction Master is immutable source artwork. Marketing mockups are derived assets.\nNo tokens, API keys, OAuth credentials or private server data are included.\n");
+    if (packageType === "complete") { const data = root.folder("06-project-data")!; data.file("project.json", JSON.stringify(safeProject(project), null, 2)); data.file("art-direction.json", JSON.stringify(project.artDirection, null, 2)); data.file("mockup-output-profile.json", JSON.stringify(DEFAULT_OUTPUT_PROFILE, null, 2)); data.file("asset-manifest.json", JSON.stringify(approved.map(omitFileUrl), null, 2)); }
+    root.file("README.txt", "Wallpaper AI Studio export\nSource Artwork is immutable. Mockup Outputs are derived presentation assets.\nNo tokens, API keys, OAuth credentials or private server data are included.\n");
     job.status = "CREATING_ARCHIVE"; const blob = await zip.generateAsync({ type: "blob", compression: "DEFLATE", compressionOptions: { level: 6 } }); job.status = "READY"; job.completedAt = new Date().toISOString();
     return { blob, job, fileNames: Object.keys(zip.files) };
   }

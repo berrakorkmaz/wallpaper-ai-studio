@@ -1,4 +1,5 @@
 import type { DesignAsset, OutputAsset, Project, RenderJob, RenderProvider } from "../../lib/core/types.ts";
+import { DEFAULT_OUTPUT_PROFILE } from "../../lib/core/output-profiles.ts";
 
 export type RenderRequest = { userId: string; project: Project; job: RenderJob; master: DesignAsset };
 export type RenderResult = Omit<OutputAsset, "id" | "projectId" | "userId" | "masterVersionId" | "slotId" | "role" | "sceneTemplateId" | "createdAt"> & { bytes?: Blob };
@@ -21,10 +22,10 @@ export class RealRenderAdapter implements RenderAdapter {
   async render(input: RenderRequest): Promise<RenderResult> {
     if (input.userId !== input.project.userId || input.master.userId !== input.userId) throw new Error("RESOURCE_NOT_FOUND");
     if (!this.endpoint || !this.serviceToken) throw new Error("REAL_RENDER_NOT_CONFIGURED");
-    const response = await fetch(`${this.endpoint.replace(/\/$/, "")}/v1/render`, { method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${this.serviceToken}`, "idempotency-key": input.job.idempotencyKey }, body: JSON.stringify({ job: input.job, master: { assetId: input.master.id, hash: input.master.fileHash }, artDirection: input.project.artDirection, output: { longEdge: 3000, format: "jpg", quality: 93, colorProfile: "sRGB", stripMetadata: true }, sourcePolicy: "mask-perspective-displacement-composite-only" }) });
+    const response = await fetch(`${this.endpoint.replace(/\/$/, "")}/v1/render`, { method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${this.serviceToken}`, "idempotency-key": input.job.idempotencyKey }, body: JSON.stringify({ job: input.job, master: { assetId: input.master.id, hash: input.master.fileHash }, artDirection: input.project.artDirection, placement: { mode: input.project.artworkPlacementMode, focalPoint: input.project.focalPoint }, output: DEFAULT_OUTPUT_PROFILE, sceneVariation: { room: input.job.slotRole, vary: ["room_category", "lighting", "camera_angle", "composition"] }, sourcePolicy: "fal-scene-generation-then-mask-perspective-displacement-composite-source-asset" }) });
     if (!response.ok) throw new Error(`RENDER_PROVIDER_${response.status}`);
     const result = await response.json() as { url: string; fileName: string; width: number; height: number; format: "jpg" | "png"; fileSize: number };
-    if (!result.url || Math.max(result.width, result.height) < 3000 || !["jpg", "png"].includes(result.format)) throw new Error("INVALID_RENDER_OUTPUT");
+    if (!result.url || result.width !== DEFAULT_OUTPUT_PROFILE.width || result.height !== DEFAULT_OUTPUT_PROFILE.height || result.format !== DEFAULT_OUTPUT_PROFILE.format) throw new Error("INVALID_RENDER_OUTPUT");
     return { fileUrl: result.url, fileName: result.fileName, width: result.width, height: result.height, format: result.format, fileSize: result.fileSize, productionReady: true, renderProvider: "real", approved: false, rejected: false };
   }
 }
