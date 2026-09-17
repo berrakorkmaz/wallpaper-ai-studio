@@ -17,6 +17,16 @@ export function generateProjectName(input: { theme?: string; productType: Produc
   return `Untitled ${productLabel(input.productType)} – ${date} – ${sequence}`;
 }
 
+export function generateUploadedProjectName(sequenceNumber: number, generatedAt: string) {
+  const sequence = String(Math.max(1, sequenceNumber)).padStart(3, "0");
+  const parts = new Intl.DateTimeFormat("en-GB", { day: "2-digit", month: "short", year: "numeric", timeZone: "UTC" }).formatToParts(new Date(generatedAt));
+  const day = parts.find((part) => part.type === "day")?.value ?? "01";
+  const month = (parts.find((part) => part.type === "month")?.value ?? "Jan").slice(0, 3);
+  const year = parts.find((part) => part.type === "year")?.value ?? "2026";
+  const date = `${day} ${month} ${year}`;
+  return `Wallpaper Project — ${date} — ${sequence}`;
+}
+
 export function refreshProjectName(project: Project, force = false): Project {
   if (project.isProjectNameManuallyEdited && !force) return project;
   const projectNameGeneratedAt = new Date().toISOString();

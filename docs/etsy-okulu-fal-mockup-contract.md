@@ -1,0 +1,113 @@
+# Etsy Okulu → Wallpaper Mockup API Contract
+
+This document defines the future production boundary between Wallpaper AI Studio and the Etsy Okulu backend. The current browser application remains in clearly labelled demo mode until this adapter is connected.
+
+## Security boundary
+
+- The browser never receives, requests, stores, logs, or transmits a Fal.ai API key.
+- Fal.ai credentials belong to the signed-in Etsy Okulu user and are encrypted at rest on the Etsy Okulu backend.
+- Every request is authenticated with the existing Etsy Okulu session.
+- The backend resolves the user credential, checks ownership of the project and source asset, and pays from that user's Fal.ai balance.
+- Responses contain only job identifiers, public-safe status metadata, and short-lived/signed output URLs.
+- API keys, access tokens, provider headers, raw provider responses, and internal storage paths are never returned.
+- The backend must use idempotency keys so a repeated request cannot charge the user twice.
+
+## POST `/api/wallpaper/mockups`
+
+Creates one batch containing six independently tracked mockup jobs.
+
+Request:
+
+```json
+{
+  "projectId": "project_123",
+  "masterVersionId": "master_456",
+  "productType": "seamless",
+  "primaryRoom": "Nursery",
+  "secondaryRoom": "Kids Room",
+  "patternScale": "medium",
+  "placement": {
+    "mode": "smart_fit",
+    "focalPoint": { "x": 50, "y": 50 }
+  },
+  "slotIds": ["mockup-1", "mockup-2", "mockup-3", "mockup-4", "mockup-5", "mockup-6"],
+  "idempotencyKey": "project_123:master_456:batch:1"
+}
+```
+
+Response (`202`):
+
+```json
+{
+  "jobId": "wallpaper_job_789",
+  "status": "queued",
+  "slots": [
+    { "slotId": "mockup-1", "status": "queued" }
+  ],
+  "estimatedCost": { "amount": "0.00", "currency": "USD", "available": false }
+}
+```
+
+`estimatedCost.available` remains `false` when the selected provider/model does not expose a reliable estimate. The UI must not invent a price.
+
+## GET `/api/wallpaper/mockups/:jobId`
+
+Returns the safe state of the batch and each slot.
+
+Response (`200`):
+
+```json
+{
+  "jobId": "wallpaper_job_789",
+  "status": "generating",
+  "slots": [
+    { "slotId": "mockup-1", "status": "completed", "outputUrl": "https://signed.example/output-1.jpg", "expiresAt": "2026-09-17T12:00:00Z" },
+    { "slotId": "mockup-2", "status": "generating" },
+    { "slotId": "mockup-3", "status": "failed", "errorCode": "PROVIDER_TIMEOUT", "retryable": true }
+  ]
+}
+```
+
+Allowed public statuses: `queued`, `generating`, `completed`, `failed`.
+
+## POST `/api/wallpaper/mockups/:jobId/retry`
+
+Retries only failed or user-rejected slots. Completed, non-rejected slots must be refused.
+
+Request:
+
+```json
+{
+  "slotIds": ["mockup-3"],
+  "idempotencyKey": "wallpaper_job_789:mockup-3:retry:1"
+}
+```
+
+Response (`202`):
+
+```json
+{
+  "jobId": "wallpaper_job_789",
+  "slots": [
+    { "slotId": "mockup-3", "status": "queued" }
+  ]
+}
+```
+
+## Error envelope
+
+```json
+{
+  "error": {
+    "code": "FAL_CONNECTION_REQUIRED",
+    "message": "Connect Fal.ai in your Etsy Okulu account.",
+    "retryable": false
+  }
+}
+```
+
+Suggested codes: `UNAUTHENTICATED`, `RESOURCE_NOT_FOUND`, `FAL_CONNECTION_REQUIRED`, `INSUFFICIENT_PROVIDER_CREDIT`, `INVALID_MASTER`, `SLOT_NOT_RETRYABLE`, `RATE_LIMITED`, `PROVIDER_TIMEOUT`, `INTERNAL_ERROR`.
+
+## Source preservation
+
+The production adapter must use the approved master asset as the exact source for every slot. It may apply masking, perspective, displacement, controlled cropping, repeat scale, shadows, and lighting. It must not ask a generative model to redraw or reinterpret the wallpaper pattern.

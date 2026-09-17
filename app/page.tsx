@@ -3,7 +3,7 @@ import StudioApp from "./StudioApp";
 
 export const metadata: Metadata = {
   title: "Wallpaper AI Studio",
-  description: "An open-source workflow for wallpaper prompts, production masters, mockups and marketplace-ready listing drafts.",
+  description: "Prompt veya hazır görselden kontrollü duvar kâğıdı mockup seti oluşturun.",
 };
 
 export default function Home() {
