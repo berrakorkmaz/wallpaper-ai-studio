@@ -1,0 +1,14 @@
+CREATE TABLE users (id TEXT PRIMARY KEY, name TEXT NOT NULL, email TEXT NOT NULL, created_at INTEGER NOT NULL);
+CREATE UNIQUE INDEX users_email_unique ON users(email);
+CREATE TABLE projects (id TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id), project_name TEXT NOT NULL, project_sequence_number INTEGER NOT NULL, is_project_name_manually_edited INTEGER NOT NULL DEFAULT 0, project_name_generated_at INTEGER NOT NULL, product_type TEXT NOT NULL, primary_target_room TEXT NOT NULL, secondary_target_room TEXT, pattern_scale TEXT, physical_width REAL, physical_height REAL, measurement_unit TEXT, calculated_aspect_ratio TEXT, target_print_ppi INTEGER NOT NULL DEFAULT 150, required_pixel_width INTEGER NOT NULL DEFAULT 0, required_pixel_height INTEGER NOT NULL DEFAULT 0, status TEXT NOT NULL, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL);
+CREATE INDEX idx_projects_user_updated ON projects(user_id, updated_at);
+CREATE TABLE prompt_specs (id TEXT PRIMARY KEY, project_id TEXT NOT NULL REFERENCES projects(id), theme TEXT NOT NULL, style TEXT NOT NULL, palette TEXT NOT NULL, motifs TEXT NOT NULL, exclusions TEXT NOT NULL, density TEXT NOT NULL, aspect_ratio TEXT NOT NULL, prompt_text TEXT NOT NULL, parameters TEXT NOT NULL, created_at INTEGER NOT NULL);
+CREATE INDEX idx_prompt_specs_project ON prompt_specs(project_id);
+CREATE TABLE design_assets (id TEXT PRIMARY KEY, project_id TEXT NOT NULL REFERENCES projects(id), user_id TEXT NOT NULL REFERENCES users(id), role TEXT NOT NULL, file_url TEXT NOT NULL, width INTEGER NOT NULL, height INTEGER NOT NULL, file_hash TEXT NOT NULL, version INTEGER NOT NULL, created_at INTEGER NOT NULL);
+CREATE INDEX idx_design_assets_owner_project ON design_assets(user_id, project_id);
+CREATE TABLE etsy_connections (id TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id), shop_id TEXT NOT NULL, encrypted_access_token TEXT NOT NULL, encrypted_refresh_token TEXT NOT NULL, expires_at INTEGER NOT NULL);
+CREATE UNIQUE INDEX etsy_connections_user_shop_unique ON etsy_connections(user_id, shop_id);
+CREATE TABLE listing_drafts (id TEXT PRIMARY KEY, project_id TEXT NOT NULL REFERENCES projects(id), user_id TEXT NOT NULL REFERENCES users(id), shop_id TEXT, title TEXT NOT NULL, description TEXT NOT NULL, tags TEXT NOT NULL, price TEXT NOT NULL, status TEXT NOT NULL, etsy_listing_id TEXT, idempotency_key TEXT, created_at INTEGER NOT NULL);
+CREATE INDEX idx_listing_drafts_owner_project ON listing_drafts(user_id, project_id);
+CREATE UNIQUE INDEX listing_drafts_idempotency_unique ON listing_drafts(idempotency_key);
+PRAGMA optimize;
