@@ -9,6 +9,9 @@ Wallpaper AI Studio turns a wallpaper idea into a controlled production workflow
 ## Features
 
 - Mobile-first six-step workflow: Project, Prompt Studio, Design Master, Art Direction, Render Queue, Listing Studio
+- Optional Prompt Studio with two starting paths: create a prompt or provide existing artwork
+- `artworkSource` tracking for generated prompts, user uploads, imports and other sources
+- PNG, JPEG, WEBP and TIFF master intake (TIFF requires a server-side decoder when the browser cannot preview it)
 - Seamless prompts with `--tile --ar 1:1`
 - Mural ratios calculated from wall width and height
 - Automatic private project names that never become marketplace titles without explicit opt-in
@@ -156,6 +159,8 @@ project-slug/
 ```
 
 Only `repeat-map.jpg` is included for seamless projects and only `mural-map.jpg` for murals. Secret-like fields are stripped from JSON metadata. Production storage implementations must verify the authenticated session and ownership before issuing a short-lived signed download URL.
+
+When `artworkSource=user_upload`, the Prompt Studio step is recorded as `Skipped · Artwork provided`. No empty prompt or Design DNA files are added to the ZIP; `project.json` records `Artwork source: User upload`. Promptless projects continue through QA, Art Direction, rendering, listing export and optional Etsy draft creation normally.
 
 ## Use without Etsy
 

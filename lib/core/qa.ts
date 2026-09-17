@@ -1,6 +1,6 @@
 import type { DesignAsset, MasterQa, Project, QaCheck } from "./types.ts";
 
-const supported = new Set(["image/jpeg", "image/png", "image/webp"]);
+const supported = new Set(["image/jpeg", "image/png", "image/webp", "image/tiff"]);
 const check = (key: string, label: string, ok: boolean, pass: string, fail: string, severity: "fail" | "warn" = "fail"): QaCheck => ({ key, label, status: ok ? "pass" : severity, detail: ok ? pass : fail });
 
 export function evaluateMasterQa(project: Project, asset: DesignAsset, edgeMetrics?: { horizontal: number; vertical: number; motifCutRisk: boolean }): MasterQa {

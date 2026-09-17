@@ -7,7 +7,7 @@ export const users = sqliteTable("users", {
 export const projects = sqliteTable("projects", {
   id: text("id").primaryKey(), userId: text("user_id").notNull().references(() => users.id), projectName: text("project_name").notNull(),
   projectSequenceNumber: integer("project_sequence_number").notNull(), isProjectNameManuallyEdited: integer("is_project_name_manually_edited", { mode: "boolean" }).notNull().default(false),
-  projectNameGeneratedAt: integer("project_name_generated_at", { mode: "timestamp_ms" }).notNull(), productType: text("product_type").notNull(),
+  projectNameGeneratedAt: integer("project_name_generated_at", { mode: "timestamp_ms" }).notNull(), productType: text("product_type").notNull(), artworkSource: text("artwork_source").notNull().default("other"),
   primaryTargetRoom: text("primary_target_room").notNull(), secondaryTargetRoom: text("secondary_target_room"), patternScale: text("pattern_scale"),
   physicalWidth: real("physical_width"), physicalHeight: real("physical_height"), measurementUnit: text("measurement_unit"), calculatedAspectRatio: text("calculated_aspect_ratio"),
   targetPrintPpi: integer("target_print_ppi").notNull().default(150), requiredPixelWidth: integer("required_pixel_width").notNull().default(0), requiredPixelHeight: integer("required_pixel_height").notNull().default(0),

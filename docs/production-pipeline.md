@@ -6,6 +6,8 @@
 
 Workflow completion is derived from project records, never navigation history. Render requests require an active immutable master in `QA_PASSED` or `APPROVED`. A replacement upload creates a new version and marks existing slots stale while preserving their original `masterVersionId` lineage.
 
+Prompt Studio is optional. `artworkSource=user_upload` records the step as skipped rather than completed, removes prompt requirements from later gates, and stores the source label in project export metadata. Uploaded artwork still passes the identical master QA and versioning pipeline.
+
 ## Renderer boundary
 
 `MockRenderAdapter` is development-only and returns `productionReady=false`. `RealRenderAdapter` calls a private queue/compositing endpoint, forwards an idempotency key and validates the returned dimensions and format. The provider must apply the approved source by wall mask, perspective/scale transform, displacement, texture blending, controlled lighting and color-safe compositing. Generative redraw of the wallpaper is prohibited.

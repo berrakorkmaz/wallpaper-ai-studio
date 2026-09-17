@@ -1,6 +1,7 @@
 export type ProductType = "seamless" | "mural";
 export type PatternScale = "small" | "medium" | "large";
 export type MeasurementUnit = "cm" | "inch";
+export type ArtworkSource = "generated_prompt" | "user_upload" | "imported" | "other";
 export type MasterStatus = "AWAITING_UPLOAD" | "UPLOADED" | "QA_RUNNING" | "QA_FAILED" | "QA_PASSED" | "APPROVED";
 export type RenderProvider = "mock" | "real";
 export type RenderJobStatus = "QUEUED" | "PREPARING" | "RENDERING" | "READY" | "FAILED" | "RETRYING" | "CANCELLED";
@@ -27,6 +28,7 @@ export type MasterQa = {
 export type DesignAsset = {
   id: string; projectId: string; userId: string; role: "production_master" | "marketing_mockup" | "listing_image";
   fileUrl: string; fileName: string; width: number; height: number; fileHash: string; version: number; createdAt: string;
+  previewUrl?: string;
   mimeType: string; fileSize: number; aspectRatio: number; colorProfile: string; hasTransparency: boolean;
   immutable: boolean; approvedAt: string | null;
 };
@@ -65,17 +67,20 @@ export type ListingDraft = {
 
 export type ArtDirection = {
   collection: string; mood: string; patternScale: PatternScale | null; primaryTargetRoom: string; secondaryTargetRoom: string;
-  recommendation: { collection: string; mood: string; patternScale: PatternScale | null; reason: string }; userOverridden: boolean; savedAt: string | null;
+  colorPalette: string[];
+  recommendation: { collection: string; mood: string; patternScale: PatternScale | null; colorPalette: string[]; suggestedRooms: string[]; reason: string }; userOverridden: boolean; savedAt: string | null;
 };
+
+export type ArtworkAnalysis = { dominantColors: string[]; averageLuminance: number; averageSaturation: number; analyzedAt: string; source: "browser" | "service" };
 
 export type Project = {
   id: string; userId: string; projectName: string; projectSequenceNumber: number; isProjectNameManuallyEdited: boolean; projectNameGeneratedAt: string;
-  productType: ProductType; primaryTargetRoom: string; secondaryTargetRoom: string; patternScale: PatternScale | null;
+  productType: ProductType; artworkSource: ArtworkSource; primaryTargetRoom: string; secondaryTargetRoom: string; patternScale: PatternScale | null;
   physicalWidth: number | null; physicalHeight: number | null; measurementUnit: MeasurementUnit | null; calculatedAspectRatio: string;
   targetPrintPpi: number; requiredPixelWidth: number; requiredPixelHeight: number; createdAt: string; updatedAt: string;
   prompt: PromptSpec; masterStatus: MasterStatus; masterVersions: DesignAsset[]; activeMasterVersionId: string | null;
-  productionMaster: DesignAsset | null; qa: MasterQa; artDirection: ArtDirection; collection: string; mood: string;
+  productionMaster: DesignAsset | null; qa: MasterQa; artworkAnalysis: ArtworkAnalysis | null; artDirection: ArtDirection; collection: string; mood: string;
   slots: RenderSlot[]; renderJobs: RenderJob[]; outputAssets: OutputAsset[]; exportJobs: ExportJob[]; listing: ListingDraft;
 };
 
-export type WorkflowState = { complete: boolean; label: string; detail: string };
+export type WorkflowState = { complete: boolean; skipped: boolean; label: string; detail: string };

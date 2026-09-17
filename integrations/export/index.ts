@@ -15,9 +15,10 @@ function stripSecrets(value: unknown): unknown {
   if (value && typeof value === "object") return Object.fromEntries(Object.entries(value).filter(([key]) => !/(api.?key|token|secret|oauth|authorization|cookie)/i.test(key)).map(([key, item]) => [key, stripSecrets(item)]));
   return value;
 }
-function omitFileUrl<T extends { fileUrl: string }>(asset: T): Omit<T, "fileUrl"> { const copy: Partial<T> = { ...asset }; delete (copy as Partial<T> & { fileUrl?: string }).fileUrl; return copy as Omit<T, "fileUrl">; }
+function omitFileUrl<T extends { fileUrl: string; previewUrl?: string }>(asset: T): Omit<T, "fileUrl" | "previewUrl"> { const copy: Partial<T> = { ...asset }; delete (copy as Partial<T> & { fileUrl?: string }).fileUrl; delete (copy as Partial<T> & { previewUrl?: string }).previewUrl; return copy as Omit<T, "fileUrl" | "previewUrl">; }
 function safeProject(project: Project) {
-  const safeValue = { ...project, masterVersions: project.masterVersions.map(omitFileUrl), productionMaster: project.productionMaster ? { ...project.productionMaster, fileUrl: "[asset omitted]" } : null, outputAssets: project.outputAssets.map(omitFileUrl), exportJobs: [] };
+  const sourceLabels = { generated_prompt: "Generated prompt", user_upload: "User upload", imported: "Imported", other: "Other" } as const;
+  const safeValue = { ...project, artworkSourceLabel: `Artwork source: ${sourceLabels[project.artworkSource]}`, masterVersions: project.masterVersions.map(omitFileUrl), productionMaster: project.productionMaster ? omitFileUrl(project.productionMaster) : null, outputAssets: project.outputAssets.map(omitFileUrl), exportJobs: [] };
   return stripSecrets(safeValue);
 }
 
@@ -48,7 +49,7 @@ export class ZipExportAdapter implements ExportAdapter {
     if (packageType === "complete") {
       const guides = root.folder("03-listing-guides")!; for (const asset of approved.filter((item) => guideNames[item.role])) await addAsset(guides, guideNames[asset.role], asset, resolver, userId);
     }
-    if (include("prompts")) { const prompts = root.folder("04-prompts")!; prompts.file("midjourney-prompt.txt", project.prompt.promptText); prompts.file("design-dna.json", JSON.stringify({ theme: project.prompt.theme, style: project.prompt.style, palette: project.prompt.palette, motifs: project.prompt.motifs }, null, 2)); prompts.file("prompt-parameters.json", JSON.stringify(project.prompt.parameters, null, 2)); prompts.file("variation-history.json", "[]"); }
+    if (include("prompts") && project.artworkSource === "generated_prompt" && project.prompt.promptText.trim()) { const prompts = root.folder("04-prompts")!; prompts.file("midjourney-prompt.txt", project.prompt.promptText); prompts.file("design-dna.json", JSON.stringify({ theme: project.prompt.theme, style: project.prompt.style, palette: project.prompt.palette, motifs: project.prompt.motifs }, null, 2)); prompts.file("prompt-parameters.json", JSON.stringify(project.prompt.parameters, null, 2)); prompts.file("variation-history.json", "[]"); }
     if (include("listing-content")) { const listing = root.folder("05-listing-content")!; listing.file("etsy-title.txt", project.listing.title); listing.file("etsy-description.txt", project.listing.description); listing.file("etsy-tags.txt", project.listing.tags.join("\n")); listing.file("listing-data.json", JSON.stringify(project.listing, null, 2)); }
     if (packageType === "complete") { const data = root.folder("06-project-data")!; data.file("project.json", JSON.stringify(safeProject(project), null, 2)); data.file("art-direction.json", JSON.stringify(project.artDirection, null, 2)); data.file("size-profile.json", JSON.stringify({ productType: project.productType, physicalWidth: project.physicalWidth, physicalHeight: project.physicalHeight, unit: project.measurementUnit, targetPrintPpi: project.targetPrintPpi, requiredPixelWidth: project.requiredPixelWidth, requiredPixelHeight: project.requiredPixelHeight }, null, 2)); data.file("asset-manifest.json", JSON.stringify(approved.map(omitFileUrl), null, 2)); }
     root.file("README.txt", "Wallpaper AI Studio export\nProduction Master is immutable source artwork. Marketing mockups are derived assets.\nNo tokens, API keys, OAuth credentials or private server data are included.\n");
