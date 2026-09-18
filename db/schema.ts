@@ -16,7 +16,7 @@ export const projects = sqliteTable("projects", {
 }, (table) => [index("idx_projects_user_updated").on(table.userId, table.updatedAt)]);
 
 export const promptSpecs = sqliteTable("prompt_specs", {
-  id: text("id").primaryKey(), projectId: text("project_id").notNull().references(() => projects.id), theme: text("theme").notNull(), style: text("style").notNull(), palette: text("palette").notNull(), motifs: text("motifs").notNull(), exclusions: text("exclusions").notNull(), density: text("density").notNull(), aspectRatio: text("aspect_ratio").notNull(), promptText: text("prompt_text").notNull(), parameters: text("parameters", { mode: "json" }).notNull(), createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
+  id: text("id").primaryKey(), projectId: text("project_id").notNull().references(() => projects.id), theme: text("theme").notNull(), characterStory: text("character_story"), customCharacterStory: text("custom_character_story"), patternContent: text("pattern_content"), style: text("style").notNull(), palette: text("palette").notNull(), motifs: text("motifs").notNull(), exclusions: text("exclusions").notNull(), density: text("density").notNull(), aspectRatio: text("aspect_ratio").notNull(), promptText: text("prompt_text").notNull(), parameters: text("parameters", { mode: "json" }).notNull(), createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
 }, (table) => [index("idx_prompt_specs_project").on(table.projectId)]);
 
 export const designAssets = sqliteTable("design_assets", {

@@ -35,7 +35,7 @@ export function refreshProjectName(project: Project, force = false): Project {
 
 export function createDemoProject(userId = "demo-user", sequenceNumber = 1): Project {
   const now = new Date().toISOString(); const id = makeId("project");
-  const prompt = { id: makeId("prompt"), projectId: id, theme: "Woodland", style: "Hand-painted gouache", palette: "Warm woodland", motifs: "foxes, fern leaves, tiny mushrooms", exclusions: "text, logos, furniture, people", density: "balanced" as const, aspectRatio: "1:1", promptText: "", parameters: { stylize: 250, chaos: 8, seed: 28471 }, selectedAt: null, createdAt: now };
+  const prompt = { id: makeId("prompt"), projectId: id, theme: "Woodland", style: "Hand-painted gouache", palette: "Warm woodland", motifs: "foxes, fern leaves, tiny mushrooms", exclusions: "text, logos, furniture, people", characterStory: "", customCharacterStory: "", patternContent: "Characters + Motifs" as const, density: "balanced" as const, aspectRatio: "1:1", promptText: "", parameters: { stylize: 250, chaos: 8, seed: 28471 }, selectedAt: null, createdAt: now };
   const projectName = generateProjectName({ theme: prompt.theme, productType: "seamless", primaryTargetRoom: "Nursery", sequenceNumber, generatedAt: now });
   const recommendation = { collection: "Baby & Nursery", mood: "Soft & airy", patternScale: "medium" as PatternScale, colorPalette: ["#70806a", "#d7c7a5", "#8f6b4d"], suggestedRooms: ["Nursery", "Kids Room"], reason: "Nursery intent and woodland motifs" };
   return { id, userId, projectName, projectSequenceNumber: sequenceNumber, isProjectNameManuallyEdited: false, projectNameGeneratedAt: now,

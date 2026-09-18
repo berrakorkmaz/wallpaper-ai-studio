@@ -3,6 +3,7 @@ export type PatternScale = "small" | "medium" | "large";
 export type MeasurementUnit = "cm" | "inch";
 export type ArtworkSource = "generated_prompt" | "user_upload" | "imported" | "other";
 export type ArtworkPlacementMode = "smart_fit" | "show_full" | "fill_wall" | "focal_point";
+export type PatternContent = "Characters + Motifs" | "Motifs Only";
 export type MasterStatus = "AWAITING_UPLOAD" | "UPLOADED" | "QA_RUNNING" | "QA_FAILED" | "QA_PASSED" | "APPROVED";
 export type RenderProvider = "mock" | "real";
 export type RenderJobStatus = "QUEUED" | "PREPARING" | "RENDERING" | "READY" | "FAILED" | "RETRYING" | "CANCELLED";
@@ -16,6 +17,7 @@ export type User = { id: string; name: string; email: string; createdAt: string 
 
 export type PromptSpec = {
   id: string; projectId: string; theme: string; style: string; palette: string; motifs: string; exclusions: string;
+  characterStory: string; customCharacterStory: string; patternContent: PatternContent;
   density: "airy" | "balanced" | "dense"; aspectRatio: string; promptText: string;
   parameters: { stylize: number; chaos: number; seed: number }; selectedAt: string | null; createdAt: string;
 };
