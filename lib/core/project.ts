@@ -1,4 +1,4 @@
-import type { ArtworkSource, PatternScale, ProductType, Project, RenderSlot, WorkflowState } from "./types.ts";
+import type { ArtworkSource, PatternScale, ProductType, Project, RenderSlot, WallpaperScalePolicy, WorkflowState } from "./types.ts";
 
 export const MOCKUP_ROLES = ["Hero room", "Alternate room", "Close-up detail", "Wide room view", "Styled room view", "Clean wall presentation"] as const;
 export const GUIDE_ROLES = ["Clean Design", "Repeat Map", "Size Information", "Order Guide"] as const;
@@ -8,6 +8,13 @@ function productLabel(productType: ProductType) { return productType === "seamle
 function makeSlots(productType: ProductType): RenderSlot[] {
   void productType;
   return MOCKUP_ROLES.map((role, index) => ({ id: `mockup-${index + 1}`, role, kind: "mockup" as const, status: "idle" as const, version: 0, activeJobId: null, outputAssetId: null, required: true }));
+}
+
+const REPEAT_SCALE_CM: Record<PatternScale, number> = { small: 18, medium: 32, large: 48 };
+export function wallpaperScalePolicy(productType: ProductType, patternScale: PatternScale | null): WallpaperScalePolicy {
+  if (productType === "mural") return { mode: "mural", repeatWidthCm: null, repeatHeightCm: null, locked: true };
+  const repeat = REPEAT_SCALE_CM[patternScale ?? "medium"];
+  return { mode: "repeat", repeatWidthCm: repeat, repeatHeightCm: repeat, locked: true };
 }
 
 export function generateProjectName(input: { theme?: string; productType: ProductType; primaryTargetRoom?: string; sequenceNumber: number; generatedAt: string }) {
@@ -39,7 +46,7 @@ export function createDemoProject(userId = "demo-user", sequenceNumber = 1): Pro
   const projectName = generateProjectName({ theme: prompt.theme, productType: "seamless", primaryTargetRoom: "Nursery", sequenceNumber, generatedAt: now });
   const recommendation = { collection: "Baby & Nursery", mood: "Soft & airy", patternScale: "medium" as PatternScale, colorPalette: ["#70806a", "#d7c7a5", "#8f6b4d"], suggestedRooms: ["Nursery", "Kids Room"], reason: "Nursery intent and woodland motifs" };
   return { id, userId, projectName, projectSequenceNumber: sequenceNumber, isProjectNameManuallyEdited: false, projectNameGeneratedAt: now,
-    productType: "seamless", artworkSource: "other", primaryTargetRoom: "Nursery", secondaryTargetRoom: "Kids Room", patternScale: "medium", artworkPlacementMode: "smart_fit", focalPoint: { x: 50, y: 50 }, physicalWidth: null, physicalHeight: null, measurementUnit: null, calculatedAspectRatio: "1:1", targetPrintPpi: 150, requiredPixelWidth: 3000, requiredPixelHeight: 3000, createdAt: now, updatedAt: now, prompt,
+    productType: "seamless", artworkSource: "other", primaryTargetRoom: "Nursery", secondaryTargetRoom: "Kids Room", patternScale: "medium", wallpaperScale: wallpaperScalePolicy("seamless", "medium"), artworkPlacementMode: "smart_fit", focalPoint: { x: 50, y: 50 }, physicalWidth: null, physicalHeight: null, measurementUnit: null, calculatedAspectRatio: "1:1", targetPrintPpi: 150, requiredPixelWidth: 3000, requiredPixelHeight: 3000, createdAt: now, updatedAt: now, prompt,
     masterStatus: "AWAITING_UPLOAD", masterVersions: [], activeMasterVersionId: null, productionMaster: null,
     qa: { status: "AWAITING_UPLOAD", score: 0, checks: [], requiredWidth: 3000, requiredHeight: 3000, missingWidth: 3000, missingHeight: 3000, upscaleRequired: true },
     artworkAnalysis: null, artDirection: { collection: recommendation.collection, mood: recommendation.mood, patternScale: recommendation.patternScale, primaryTargetRoom: "Nursery", secondaryTargetRoom: "Kids Room", colorPalette: recommendation.colorPalette, recommendation, userOverridden: false, savedAt: null },
@@ -48,11 +55,11 @@ export function createDemoProject(userId = "demo-user", sequenceNumber = 1): Pro
 }
 
 export function changeProductType(project: Project, productType: ProductType): Project {
-  return refreshProjectName({ ...project, productType, patternScale: null, physicalWidth: null, physicalHeight: null, measurementUnit: null, calculatedAspectRatio: productType === "seamless" ? "1:1" : "", requiredPixelWidth: productType === "seamless" ? 3000 : 0, requiredPixelHeight: productType === "seamless" ? 3000 : 0, prompt: { ...project.prompt, aspectRatio: productType === "seamless" ? "1:1" : "" }, masterStatus: "AWAITING_UPLOAD", masterVersions: [], activeMasterVersionId: null, productionMaster: null, slots: makeSlots(productType), renderJobs: [], outputAssets: [] });
+  return refreshProjectName({ ...project, productType, patternScale: null, wallpaperScale: wallpaperScalePolicy(productType, null), physicalWidth: null, physicalHeight: null, measurementUnit: null, calculatedAspectRatio: productType === "seamless" ? "1:1" : "", requiredPixelWidth: productType === "seamless" ? 3000 : 0, requiredPixelHeight: productType === "seamless" ? 3000 : 0, prompt: { ...project.prompt, aspectRatio: productType === "seamless" ? "1:1" : "" }, masterStatus: "AWAITING_UPLOAD", masterVersions: [], activeMasterVersionId: null, productionMaster: null, slots: makeSlots(productType), renderJobs: [], outputAssets: [] });
 }
 
 export function validateProject(project: Project) { const errors: Record<string, string> = {}; if (!project.productType) errors.productType = "Select a product type."; if (!project.primaryTargetRoom) errors.primaryTargetRoom = "Select a primary target room."; if (project.productType === "seamless" && !project.patternScale) errors.patternScale = "Select a pattern scale."; if (!project.productionMaster) errors.productionMaster = "Upload your source artwork."; return errors; }
-export function setPatternScale(project: Project, patternScale: PatternScale): Project { return { ...project, patternScale, artDirection: { ...project.artDirection, patternScale, userOverridden: true } }; }
+export function setPatternScale(project: Project, patternScale: PatternScale): Project { return { ...project, patternScale, wallpaperScale: wallpaperScalePolicy("seamless", patternScale), artDirection: { ...project.artDirection, patternScale, userOverridden: true } }; }
 export function selectArtworkSource(project: Project, artworkSource: ArtworkSource): Project {
   const prompt = artworkSource === "user_upload" ? { ...project.prompt, promptText: "", selectedAt: null } : project.prompt;
   return { ...project, artworkSource, prompt };

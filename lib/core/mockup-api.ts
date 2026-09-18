@@ -1,4 +1,4 @@
-import type { ArtworkPlacementMode, PatternScale, ProductType } from "./types.ts";
+import type { ArtworkPlacementMode, PatternScale, ProductType, WallpaperScalePolicy } from "./types.ts";
 import type { MockupCategoryId, SceneBlueprint } from "./mockup-scenes.ts";
 
 export type MockupProviderId = "mock" | "fal" | "custom";
@@ -31,6 +31,7 @@ export type CreateMockupBatchRequest = {
   source: SourceWallpaperAsset;
   productType: ProductType;
   patternScale: PatternScale | null;
+  wallpaperScale: WallpaperScalePolicy;
   placement: { mode: ArtworkPlacementMode; focalPoint: { x: number; y: number } };
   scenes: MockupSceneInput[];
   output: { width: number; height: number; aspectRatio: string; format: "jpg"; quality: number };

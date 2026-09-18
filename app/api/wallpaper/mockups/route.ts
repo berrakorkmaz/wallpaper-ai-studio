@@ -25,17 +25,19 @@ function errorDetail(error: unknown) {
   return { code, ...(errors[code] ?? { status: 502, message: "Fal generation failed. Try again or check the provider status.", retryable: true }) };
 }
 
-function validateFalInput(input: CreateMockupBatchRequest, config: ServerRenderConfig, streaming: boolean) {
+function validateFalInput(input: CreateMockupBatchRequest, streaming: boolean) {
   if (!input.source?.sourceDataUrl) throw new Error("SOURCE_IMAGE_REQUIRED");
   if (!Array.isArray(input.scenes) || !input.scenes.length || input.scenes.length > 6) throw new Error("INVALID_SCENE_PLAN");
   if (streaming && input.scenes.length !== 1) throw new Error("INVALID_SCENE_PLAN");
   if (input.scenes.some((scene) => !scene.prompt?.trim() || !Number.isInteger(scene.generationSeed) || scene.generationSeed <= 0 || scene.category !== input.scenes[0].category)) throw new Error("INVALID_SCENE_PLAN");
+  if (!input.wallpaperScale?.locked || input.wallpaperScale.mode !== (input.productType === "seamless" ? "repeat" : "mural")) throw new Error("INVALID_SCENE_PLAN");
+  if (input.productType === "seamless" && (!input.wallpaperScale.repeatWidthCm || !input.wallpaperScale.repeatHeightCm)) throw new Error("INVALID_SCENE_PLAN");
 }
 
 async function renderFalScene(input: CreateMockupBatchRequest, scene: MockupSceneInput, service: FalMockupService, jobId: string, createdAt: string, onStage?: (stage: MockupJobStage) => void): Promise<MockupOutputRecord> {
   onStage?.("generating_scene");
   try {
-    const generated = await service.generateMockup({ scene, wallpaperDataUrl: input.source.sourceDataUrl!, productType: input.productType, patternScale: input.patternScale }, (stage) => onStage?.(stage));
+    const generated = await service.generateMockup({ scene, wallpaperDataUrl: input.source.sourceDataUrl!, productType: input.productType, patternScale: input.patternScale, wallpaperScale: input.wallpaperScale }, (stage) => onStage?.(stage));
     console.info("[render-api] final AI-edited mockup completed", { provider: "fal", sceneId: scene.sceneId, interiorProviderJobId: generated.interiorProviderJobId, providerJobId: generated.providerJobId });
     return { id: `fal-output-${generated.providerJobId}`, jobId, sceneId: scene.sceneId, slotId: scene.slotId, category: scene.category, status: "completed", prompt: scene.prompt, provider: "fal", providerJobId: generated.providerJobId, outputUrl: generated.imageUrl, thumbnailUrl: generated.imageUrl, storageKey: null, width: generated.width, height: generated.height, createdAt, error: null };
   } catch (error) {
@@ -80,7 +82,7 @@ export async function POST(request: Request) {
     const input = await request.json() as CreateMockupBatchRequest;
     if (config.provider === "fal") {
       const streaming = new URL(request.url).searchParams.get("stream") === "1";
-      validateFalInput(input, config, streaming);
+      validateFalInput(input, streaming);
       console.info("[render-api] provider selected", { provider: config.provider, sceneModel: config.falModel, editModel: config.falEditModel, sceneIds: input.scenes.map((scene) => scene.sceneId) });
       if (streaming) return streamFalMockup(input, config);
       const createdAt = new Date().toISOString();

@@ -1,5 +1,11 @@
 export type ProductType = "seamless" | "mural";
 export type PatternScale = "small" | "medium" | "large";
+export type WallpaperScalePolicy = {
+  mode: "repeat" | "mural";
+  repeatWidthCm: number | null;
+  repeatHeightCm: number | null;
+  locked: true;
+};
 export type MeasurementUnit = "cm" | "inch";
 export type ArtworkSource = "generated_prompt" | "user_upload" | "imported" | "other";
 export type ArtworkPlacementMode = "smart_fit" | "show_full" | "fill_wall" | "focal_point";
@@ -80,7 +86,7 @@ export type ArtworkAnalysis = { dominantColors: string[]; averageLuminance: numb
 
 export type Project = {
   id: string; userId: string; projectName: string; projectSequenceNumber: number; isProjectNameManuallyEdited: boolean; projectNameGeneratedAt: string;
-  productType: ProductType; artworkSource: ArtworkSource; primaryTargetRoom: string; secondaryTargetRoom: string; patternScale: PatternScale | null;
+  productType: ProductType; artworkSource: ArtworkSource; primaryTargetRoom: string; secondaryTargetRoom: string; patternScale: PatternScale | null; wallpaperScale: WallpaperScalePolicy;
   artworkPlacementMode: ArtworkPlacementMode; focalPoint: { x: number; y: number };
   physicalWidth: number | null; physicalHeight: number | null; measurementUnit: MeasurementUnit | null; calculatedAspectRatio: string;
   targetPrintPpi: number; requiredPixelWidth: number; requiredPixelHeight: number; createdAt: string; updatedAt: string;

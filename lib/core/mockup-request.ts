@@ -17,9 +17,12 @@ export function buildMockupBatchRequest(project: Project, slotIds = project.slot
   return {
     projectId: project.id, userId: project.userId, masterVersionId: master.id,
     source: { assetId: master.id, storageKey: master.storageKey ?? "", signedSourceUrl: master.signedSourceUrl ?? "", fileHash: master.fileHash, mimeType: master.mimeType, width: master.width, height: master.height, sourceDataUrl },
-    productType: project.productType, patternScale: project.patternScale,
+    productType: project.productType, patternScale: project.patternScale, wallpaperScale: project.wallpaperScale,
     placement: { mode: project.artworkPlacementMode, focalPoint: project.focalPoint },
-    scenes: slots.map((slot, index) => ({ slotId: slot.id, sceneId: blueprints[index].id, generationSeed: generationSeed(), category, blueprint: blueprints[index], prompt: buildMockupPrompt({ project, sceneBlueprint: blueprints[index], previousScenes: blueprints.slice(0, index) }) })),
+    scenes: slots.map((slot, index) => {
+      const seed = generationSeed();
+      return { slotId: slot.id, sceneId: blueprints[index].id, generationSeed: seed, category, blueprint: blueprints[index], prompt: buildMockupPrompt({ project, sceneBlueprint: blueprints[index], previousScenes: blueprints.slice(0, index), generationSeed: seed }) };
+    }),
     output: { width: DEFAULT_OUTPUT_PROFILE.width, height: DEFAULT_OUTPUT_PROFILE.height, aspectRatio: `${DEFAULT_OUTPUT_PROFILE.width}:${DEFAULT_OUTPUT_PROFILE.height}`, format: "jpg", quality: DEFAULT_OUTPUT_PROFILE.quality },
     idempotencyKey: `${project.id}:${master.id}:batch:${Math.max(...slots.map((slot) => slot.version), 0) + 1}`,
   };
