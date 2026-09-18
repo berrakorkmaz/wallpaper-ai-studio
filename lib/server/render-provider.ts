@@ -1,6 +1,6 @@
 import { MockRenderAdapter, RealRenderAdapter, type RenderAdapter } from "../../integrations/image-generation/index.ts";
-import { DEFAULT_FAL_SMOKE_MODEL, FalRenderAdapter } from "../../integrations/image-generation/fal.ts";
-import { DEFAULT_FAL_WALL_SEGMENTATION_MODEL, FalWallSegmentationAdapter } from "../../integrations/image-generation/wall-segmentation.ts";
+import { DEFAULT_FAL_EDIT_MODEL, DEFAULT_FAL_SCENE_MODEL, FalRenderAdapter } from "../../integrations/image-generation/fal.ts";
+import { FalMockupService } from "../../integrations/image-generation/mockup-service.ts";
 import type { MockupProviderId } from "../core/mockup-api.ts";
 
 export type ServerRenderConfig = {
@@ -9,7 +9,7 @@ export type ServerRenderConfig = {
   serviceUrl: string;
   serviceToken: string;
   falModel: string;
-  falWallSegmentationModel: string;
+  falEditModel: string;
   falSingleMockupTest: boolean;
   falConfigured: boolean;
   productionReady: boolean;
@@ -22,29 +22,29 @@ export function getServerRenderConfig(env: NodeJS.ProcessEnv = process.env): Ser
   const demoMode = env.DEMO_MODE !== "false";
   const serviceUrl = env.RENDER_SERVICE_URL?.trim() ?? "";
   const serviceToken = env.RENDER_SERVICE_TOKEN?.trim() ?? "";
-  const falModel = env.FAL_MODEL?.trim() || DEFAULT_FAL_SMOKE_MODEL;
-  const falWallSegmentationModel = env.FAL_WALL_SEGMENTATION_MODEL?.trim() || DEFAULT_FAL_WALL_SEGMENTATION_MODEL;
+  const falModel = env.FAL_MODEL?.trim() || DEFAULT_FAL_SCENE_MODEL;
+  const falEditModel = env.FAL_EDIT_MODEL?.trim() || DEFAULT_FAL_EDIT_MODEL;
   const falSingleMockupTest = env.FAL_SINGLE_MOCKUP_TEST !== "false";
   const missing = provider === "mock" ? [] : provider === "fal" ? [!env.FAL_KEY?.trim() && "FAL_KEY"].filter(Boolean) as string[] : [!serviceUrl && "RENDER_SERVICE_URL", !serviceToken && "RENDER_SERVICE_TOKEN"].filter(Boolean) as string[];
-  return { provider, demoMode: provider === "fal" ? false : demoMode, serviceUrl, serviceToken, falModel, falWallSegmentationModel, falSingleMockupTest, falConfigured: provider === "fal" && !missing.length, productionReady: provider === "fal" ? !missing.length : !demoMode && provider !== "mock" && !missing.length, missing };
+  return { provider, demoMode: provider === "fal" ? false : demoMode, serviceUrl, serviceToken, falModel, falEditModel, falSingleMockupTest, falConfigured: provider === "fal" && !missing.length, productionReady: provider === "fal" ? !missing.length : !demoMode && provider !== "mock" && !missing.length, missing };
 }
 
 export function createFalRenderAdapter(config = getServerRenderConfig(), env: NodeJS.ProcessEnv = process.env) {
   if (config.provider !== "fal") throw new Error("FAL_PROVIDER_NOT_SELECTED");
   if (!config.falConfigured) throw new Error("FAL_MISSING_KEY");
-  return new FalRenderAdapter(env.FAL_KEY ?? "", config.falModel);
+  return new FalRenderAdapter(env.FAL_KEY ?? "", config.falModel, config.falEditModel);
 }
 
-export function createFalWallSegmentationAdapter(config = getServerRenderConfig(), env: NodeJS.ProcessEnv = process.env) {
+export function createFalMockupService(config = getServerRenderConfig(), env: NodeJS.ProcessEnv = process.env) {
   if (config.provider !== "fal") throw new Error("FAL_PROVIDER_NOT_SELECTED");
   if (!config.falConfigured) throw new Error("FAL_MISSING_KEY");
-  return new FalWallSegmentationAdapter(env.FAL_KEY ?? "", config.falWallSegmentationModel);
+  return new FalMockupService(new FalRenderAdapter(env.FAL_KEY ?? "", config.falModel, config.falEditModel));
 }
 
 export function createServerRenderAdapter(config = getServerRenderConfig()): RenderAdapter {
   if (config.provider === "mock") return new MockRenderAdapter();
   if (!config.productionReady) throw new Error(`RENDER_PROVIDER_NOT_CONFIGURED:${config.missing.join(",")}`);
-  if (config.provider === "fal") throw new Error("FAL_SMOKE_TEST_USES_SCENE_ADAPTER");
+  if (config.provider === "fal") throw new Error("FAL_USES_MOCKUP_SERVICE");
   return new RealRenderAdapter(config.serviceUrl, config.serviceToken);
 }
 
