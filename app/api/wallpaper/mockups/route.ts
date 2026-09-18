@@ -24,6 +24,7 @@ export async function POST(request: Request) {
     if (config.provider === "fal") {
       const scene = input.scenes[0];
       if (!scene?.prompt.trim()) throw new Error("INVALID_SCENE_PLAN");
+      console.info("[render-api] provider selected", { provider: config.provider, model: config.falModel, sceneId: scene.sceneId });
       const createdAt = new Date().toISOString();
       const result = await createFalRenderAdapter(config).renderScene(scene);
       return NextResponse.json({ jobId: `fal-smoke-${result.providerJobId}`, projectId: input.projectId, provider: "fal", status: "completed", createdAt, updatedAt: new Date().toISOString(), outputs: [{ id: `fal-output-${result.providerJobId}`, jobId: `fal-smoke-${result.providerJobId}`, sceneId: scene.sceneId, slotId: scene.slotId, category: scene.category, status: "completed", prompt: scene.prompt, provider: "fal", providerJobId: result.providerJobId, outputUrl: result.imageUrl, thumbnailUrl: result.imageUrl, storageKey: null, width: result.width, height: result.height, createdAt, error: null }] }, { status: 201 });
