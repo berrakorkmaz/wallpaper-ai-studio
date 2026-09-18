@@ -69,7 +69,7 @@ All values in `.env.example` are intentionally empty.
 | `ETSY_REDIRECT_URI` | Callback URL registered for this installation |
 | `STORAGE_PROVIDER` | Storage adapter name |
 | `STORAGE_BUCKET` | Private upload bucket |
-| `RENDER_PROVIDER` | `mock` or `real` |
+| `RENDER_PROVIDER` | `mock`, `fal`, or `custom` (`real` remains a legacy alias for `custom`) |
 | `RENDER_SERVICE_URL` | Server-side mask/perspective compositing queue endpoint |
 | `RENDER_SERVICE_TOKEN` | Private service credential; never expose to the browser |
 | `EXPORT_SIGNING_SECRET` | Secret used to sign expiring download URLs |
@@ -140,10 +140,12 @@ The repository does not contain a real key, shared secret, token, shop ID, callb
 ## Render providers
 
 - `RENDER_PROVIDER=mock` uses the development renderer. It creates 3000 × 3000 browser-downloadable previews but always records `productionReady=false`.
-- `RENDER_PROVIDER=real` calls the server-side scene/compositing adapter in `integrations/image-generation`. A valid result must match the central 3000 × 3000 JPG profile and retain the approved source asset ID/hash.
+- `RENDER_PROVIDER=fal` or `custom` calls the server-side scene/compositing boundary in `integrations/image-generation`. A valid result must match the central 3000 × 3000 JPG profile and retain the approved source asset ID/hash.
 - The real provider receives a strict `mask-perspective-displacement-composite-only` source policy. It must not use generative image synthesis on the wallpaper artwork.
 
 The real renderer should operate through a queue and private object storage. Recommended building blocks are Cloudflare Queues + R2, AWS SQS + S3, or an equivalent worker and object-store combination. ImageMagick/libvips/OpenCV can implement masks, perspective transforms, displacement maps, controlled lighting and color-safe compositing.
+
+The provider-independent production handoff, async API lifecycle, exact-source compositing design, security boundary and Fal activation checklist are documented in [`docs/AI-MOCKUP-INTEGRATION.md`](docs/AI-MOCKUP-INTEGRATION.md).
 
 ## Export packages
 

@@ -22,6 +22,15 @@ Request:
 {
   "projectId": "project_123",
   "masterVersionId": "master_456",
+  "source": {
+    "assetId": "master_456",
+    "storageKey": "user_1/sources/master_456.png",
+    "signedSourceUrl": "https://storage.example/signed/source",
+    "fileHash": "sha256...",
+    "mimeType": "image/png",
+    "width": 4000,
+    "height": 4000
+  },
   "productType": "seamless",
   "primaryRoom": "Nursery",
   "secondaryRoom": "Kids Room",
@@ -30,7 +39,14 @@ Request:
     "mode": "smart_fit",
     "focalPoint": { "x": 50, "y": 50 }
   },
-  "slotIds": ["mockup-1", "mockup-2", "mockup-3", "mockup-4", "mockup-5", "mockup-6"],
+  "scenes": [{
+    "slotId": "mockup-1",
+    "sceneId": "nursery-hero-v1",
+    "category": "Nursery",
+    "prompt": "Create a photorealistic modern nursery...",
+    "blueprint": { "role": "hero", "cameraAngle": "frontal three-quarter", "lighting": "broad soft morning window light" }
+  }],
+  "output": { "width": 3000, "height": 3000, "aspectRatio": "1:1", "format": "jpg", "quality": 93 },
   "idempotencyKey": "project_123:master_456:batch:1"
 }
 ```
@@ -42,7 +58,7 @@ Response (`202`):
   "jobId": "wallpaper_job_789",
   "status": "queued",
   "slots": [
-    { "slotId": "mockup-1", "status": "queued" }
+    { "slotId": "mockup-1", "sceneId": "nursery-hero-v1", "status": "queued", "providerJobId": null }
   ],
   "estimatedCost": { "amount": "0.00", "currency": "USD", "available": false }
 }
@@ -68,7 +84,7 @@ Response (`200`):
 }
 ```
 
-Allowed public statuses: `queued`, `generating`, `completed`, `failed`.
+Allowed public statuses: `queued`, `generating_scene`, `detecting_wall`, `compositing_wallpaper`, `quality_check`, `completed`, `failed`.
 
 ## POST `/api/wallpaper/mockups/:jobId/retry`
 
@@ -79,6 +95,7 @@ Request:
 ```json
 {
   "slotIds": ["mockup-3"],
+  "rejectedSlotIds": [],
   "idempotencyKey": "wallpaper_job_789:mockup-3:retry:1"
 }
 ```

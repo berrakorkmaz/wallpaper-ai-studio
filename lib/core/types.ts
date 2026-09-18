@@ -32,6 +32,8 @@ export type DesignAsset = {
   previewUrl?: string;
   mimeType: string; fileSize: number; aspectRatio: number; colorProfile: string; hasTransparency: boolean;
   immutable: boolean; approvedAt: string | null;
+  storageKey?: string;
+  signedSourceUrl?: string;
 };
 
 export type OutputAsset = {
