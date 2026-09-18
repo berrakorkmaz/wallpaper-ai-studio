@@ -1,29 +1,8 @@
 import { decode, encode } from "fast-png";
 import type { PatternScale, ProductType } from "../../lib/core/types.ts";
-import type { MockupSceneInput } from "../../lib/core/mockup-api.ts";
 
 type Point = { x: number; y: number };
-export type WallRegion = { corners: [Point, Point, Point, Point]; strategy: "blueprint-bounds" | "automatic" };
-
-export interface WallDetectionAdapter {
-  detect(input: { scene: MockupSceneInput; width: number; height: number }): Promise<WallRegion>;
-}
-
-const roleBounds: Record<MockupSceneInput["blueprint"]["role"], [Point, Point, Point, Point]> = {
-  hero: [{ x: .03, y: .03 }, { x: .97, y: .04 }, { x: .94, y: .67 }, { x: .05, y: .73 }],
-  creative: [{ x: .16, y: .03 }, { x: .98, y: .04 }, { x: .94, y: .68 }, { x: .1, y: .62 }],
-  closeup: [{ x: .02, y: .02 }, { x: .98, y: .02 }, { x: .97, y: .9 }, { x: .03, y: .9 }],
-  wide: [{ x: .02, y: .03 }, { x: .98, y: .04 }, { x: .96, y: .65 }, { x: .04, y: .71 }],
-  editorial: [{ x: .04, y: .03 }, { x: .97, y: .03 }, { x: .92, y: .7 }, { x: .08, y: .67 }],
-  perspective: [{ x: .02, y: .03 }, { x: .76, y: .14 }, { x: .72, y: .76 }, { x: .03, y: .85 }],
-};
-
-export class BlueprintWallRegionAdapter implements WallDetectionAdapter {
-  async detect({ scene, width, height }: { scene: MockupSceneInput; width: number; height: number }): Promise<WallRegion> {
-    const corners = roleBounds[scene.blueprint.role].map((point) => ({ x: point.x * width, y: point.y * height })) as [Point, Point, Point, Point];
-    return { corners, strategy: "blueprint-bounds" };
-  }
-}
+type WallPlane = { corners: [Point, Point, Point, Point]; mask: Uint8Array; strategy: "semantic-mask" };
 
 function solve(matrix: number[][]) {
   const size = matrix.length;
@@ -62,64 +41,78 @@ function parseSourceDataUrl(value: string) {
 }
 
 function rgba(image: ReturnType<typeof decode>) {
-  if (image.depth !== 8 || ![3, 4].includes(image.channels) || image.width * image.height > 25_000_000) throw new Error("SOURCE_IMAGE_INVALID");
-  if (image.channels === 4) return new Uint8Array(image.data.buffer, image.data.byteOffset, image.data.byteLength);
+  if (image.depth !== 8 || ![1, 2, 3, 4].includes(image.channels) || image.width * image.height > 25_000_000) throw new Error("SOURCE_IMAGE_INVALID");
   const output = new Uint8Array(image.width * image.height * 4);
-  for (let source = 0, target = 0; source < image.data.length; source += 3, target += 4) { output[target] = image.data[source]; output[target + 1] = image.data[source + 1]; output[target + 2] = image.data[source + 2]; output[target + 3] = 255; }
+  for (let pixel = 0; pixel < image.width * image.height; pixel++) {
+    const source = pixel * image.channels; const target = pixel * 4;
+    if (image.channels <= 2) output[target] = output[target + 1] = output[target + 2] = image.data[source];
+    else { output[target] = image.data[source]; output[target + 1] = image.data[source + 1]; output[target + 2] = image.data[source + 2]; }
+    output[target + 3] = image.channels === 2 || image.channels === 4 ? image.data[source + image.channels - 1] : 255;
+  }
   return output;
+}
+
+function median(values: number[]) { const ordered = [...values].sort((a, b) => a - b); return ordered[Math.floor(ordered.length / 2)]; }
+
+function wallPlane(maskBytes: Buffer, width: number, height: number): WallPlane {
+  const decoded = decode(maskBytes); const pixels = rgba(decoded); const mask = new Uint8Array(width * height);
+  const rows: { y: number; left: number; right: number }[] = []; let selected = 0;
+  for (let y = 0; y < height; y++) {
+    let left = width; let right = -1;
+    for (let x = 0; x < width; x++) {
+      const mx = Math.min(decoded.width - 1, Math.floor(x * decoded.width / width));
+      const my = Math.min(decoded.height - 1, Math.floor(y * decoded.height / height));
+      const offset = (my * decoded.width + mx) * 4;
+      const value = Math.round(((pixels[offset] + pixels[offset + 1] + pixels[offset + 2]) / 3) * pixels[offset + 3] / 255);
+      const alpha = value >= 128 ? value : 0; mask[y * width + x] = alpha;
+      if (alpha) { selected++; left = Math.min(left, x); right = Math.max(right, x); }
+    }
+    if (right - left >= width * .08) rows.push({ y, left, right });
+  }
+  const coverage = selected / (width * height);
+  if (coverage < .04 || coverage > .9 || rows.length < height * .08) throw new Error("WALL_MASK_UNUSABLE");
+  const topY = rows[0].y; const bottomY = rows[rows.length - 1].y; const span = Math.max(1, bottomY - topY);
+  const topRows = rows.filter((row) => row.y <= topY + span * .18);
+  const bottomRows = rows.filter((row) => row.y >= topY + span * .68);
+  if (!topRows.length || !bottomRows.length) throw new Error("WALL_MASK_UNUSABLE");
+  const corners: [Point, Point, Point, Point] = [
+    { x: median(topRows.map((row) => row.left)), y: topY },
+    { x: median(topRows.map((row) => row.right)), y: topY },
+    { x: median(bottomRows.map((row) => row.right)), y: bottomY },
+    { x: median(bottomRows.map((row) => row.left)), y: bottomY },
+  ];
+  return { corners, mask, strategy: "semantic-mask" };
 }
 
 function patternRepeats(scale: PatternScale | null) { return scale === "small" ? 6 : scale === "large" ? 2 : 4; }
 
-export type CompositeInput = {
-  sceneImage: Buffer;
-  sourceDataUrl: string;
-  scene: MockupSceneInput;
-  productType: ProductType;
-  patternScale: PatternScale | null;
-};
-
-export type CompositeResult = { bytes: Buffer; width: number; height: number; wallStrategy: WallRegion["strategy"] };
+export type CompositeInput = { sceneImage: Buffer; wallMask: Buffer; sourceDataUrl: string; productType: ProductType; patternScale: PatternScale | null };
+export type CompositeResult = { bytes: Buffer; width: number; height: number; wallStrategy: "semantic-mask" };
 
 export class SourcePreservingWallpaperCompositor {
-  private readonly wallDetector: WallDetectionAdapter;
-  constructor(wallDetector: WallDetectionAdapter = new BlueprintWallRegionAdapter()) { this.wallDetector = wallDetector; }
-
   async composite(input: CompositeInput): Promise<CompositeResult> {
     const sceneDecoded = decode(input.sceneImage); const wallpaperDecoded = decode(parseSourceDataUrl(input.sourceDataUrl));
     if (sceneDecoded.width * sceneDecoded.height > 4_500_000) throw new Error("SCENE_IMAGE_INVALID");
     const scenePixels = rgba(sceneDecoded); const wallpaperPixels = rgba(wallpaperDecoded);
-    const { width, height } = sceneDecoded;
-    const sourceWidth = wallpaperDecoded.width; const sourceHeight = wallpaperDecoded.height;
-    const output = new Uint8Array(scenePixels);
-    const region = await this.wallDetector.detect({ scene: input.scene, width, height });
-    const transform = inversePerspective(region.corners);
-    const minX = Math.max(0, Math.floor(Math.min(...region.corners.map((point) => point.x))));
-    const maxX = Math.min(width - 1, Math.ceil(Math.max(...region.corners.map((point) => point.x))));
-    const minY = Math.max(0, Math.floor(Math.min(...region.corners.map((point) => point.y))));
-    const maxY = Math.min(height - 1, Math.ceil(Math.max(...region.corners.map((point) => point.y))));
-    const repeats = patternRepeats(input.patternScale);
-    for (let y = minY; y <= maxY; y++) for (let x = minX; x <= maxX; x++) {
+    const { width, height } = sceneDecoded; const sourceWidth = wallpaperDecoded.width; const sourceHeight = wallpaperDecoded.height;
+    const output = new Uint8Array(scenePixels); const plane = wallPlane(input.wallMask, width, height); const transform = inversePerspective(plane.corners);
+    let luminanceTotal = 0; let luminanceCount = 0;
+    for (let pixel = 0; pixel < plane.mask.length; pixel++) if (plane.mask[pixel]) { const offset = pixel * 4; luminanceTotal += scenePixels[offset] * .2126 + scenePixels[offset + 1] * .7152 + scenePixels[offset + 2] * .0722; luminanceCount++; }
+    const meanLuminance = Math.max(1, luminanceTotal / Math.max(1, luminanceCount)); const repeats = patternRepeats(input.patternScale);
+    for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
+      const maskAlpha = plane.mask[y * width + x] / 255; if (!maskAlpha) continue;
       const denominator = transform[6] * x + transform[7] * y + 1;
       const u = (transform[0] * x + transform[1] * y + transform[2]) / denominator;
       const v = (transform[3] * x + transform[4] * y + transform[5]) / denominator;
       if (u < 0 || u > 1 || v < 0 || v > 1) continue;
-      const sourceU = input.productType === "seamless" ? (u * repeats) % 1 : u;
-      const sourceV = input.productType === "seamless" ? (v * repeats) % 1 : v;
-      const sx = Math.min(sourceWidth - 1, Math.floor(sourceU * sourceWidth));
-      const sy = Math.min(sourceHeight - 1, Math.floor(sourceV * sourceHeight));
-      const sourceOffset = (sy * sourceWidth + sx) * 4; const outputOffset = (y * width + x) * 4;
-      if (wallpaperPixels[sourceOffset + 3] === 0) continue;
-      const luminance = (scenePixels[outputOffset] * .2126 + scenePixels[outputOffset + 1] * .7152 + scenePixels[outputOffset + 2] * .0722) / 255;
-      const light = Math.max(.72, Math.min(1.16, .72 + luminance * .44));
-      const alpha = .96;
-      for (let channel = 0; channel < 3; channel++) {
-        const illuminated = Math.max(0, Math.min(255, wallpaperPixels[sourceOffset + channel] * light));
-        output[outputOffset + channel] = Math.round(illuminated * alpha + scenePixels[outputOffset + channel] * (1 - alpha));
-      }
+      const sourceU = input.productType === "seamless" ? (u * repeats) % 1 : u; const sourceV = input.productType === "seamless" ? (v * repeats) % 1 : v;
+      const sx = Math.min(sourceWidth - 1, Math.floor(sourceU * sourceWidth)); const sy = Math.min(sourceHeight - 1, Math.floor(sourceV * sourceHeight));
+      const sourceOffset = (sy * sourceWidth + sx) * 4; const outputOffset = (y * width + x) * 4; if (!wallpaperPixels[sourceOffset + 3]) continue;
+      const wallLuminance = scenePixels[outputOffset] * .2126 + scenePixels[outputOffset + 1] * .7152 + scenePixels[outputOffset + 2] * .0722;
+      const illumination = Math.max(.62, Math.min(1.28, wallLuminance / meanLuminance)); const alpha = maskAlpha * .97;
+      for (let channel = 0; channel < 3; channel++) { const lit = Math.max(0, Math.min(255, wallpaperPixels[sourceOffset + channel] * illumination)); output[outputOffset + channel] = Math.round(lit * alpha + scenePixels[outputOffset + channel] * (1 - alpha)); }
       output[outputOffset + 3] = 255;
     }
-    const bytes = Buffer.from(encode({ width, height, data: output, channels: 4, depth: 8 }, { zlib: { level: 6 } }));
-    return { bytes, width, height, wallStrategy: region.strategy };
+    return { bytes: Buffer.from(encode({ width, height, data: output, channels: 4, depth: 8 }, { zlib: { level: 6 } })), width, height, wallStrategy: plane.strategy };
   }
 }

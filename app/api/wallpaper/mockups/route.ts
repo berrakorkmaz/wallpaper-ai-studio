@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import type { CreateMockupBatchRequest, MockupApiError } from "../../../../lib/core/mockup-api.ts";
 import { getMockupJobService } from "../../../../lib/server/mockup-jobs.ts";
-import { createFalRenderAdapter, getServerRenderConfig } from "../../../../lib/server/render-provider.ts";
+import { createFalRenderAdapter, createFalWallSegmentationAdapter, getServerRenderConfig } from "../../../../lib/server/render-provider.ts";
 import { SourcePreservingWallpaperCompositor } from "../../../../integrations/image-generation/wall-compositor.ts";
 
 const errors: Record<string, { status: number; message: string; retryable: boolean }> = {
@@ -21,6 +21,12 @@ const errors: Record<string, { status: number; message: string; retryable: boole
   SCENE_IMAGE_DOWNLOAD_FAILED: { status: 502, message: "The generated Fal scene could not be downloaded for compositing.", retryable: true },
   SCENE_IMAGE_INVALID: { status: 502, message: "The generated Fal scene image is invalid or too large.", retryable: true },
   WALL_PERSPECTIVE_INVALID: { status: 422, message: "The temporary wall bounds could not be transformed safely.", retryable: true },
+  WALL_SEGMENTATION_TIMEOUT: { status: 504, message: "Wall detection timed out. Try this scene again.", retryable: true },
+  WALL_SEGMENTATION_INVALID_RESPONSE: { status: 502, message: "Wall detection returned an invalid response.", retryable: true },
+  WALL_SEGMENTATION_FAILED: { status: 502, message: "The generated room wall could not be segmented.", retryable: true },
+  WALL_MASK_DOWNLOAD_FAILED: { status: 502, message: "The detected wall mask could not be downloaded.", retryable: true },
+  WALL_MASK_UNUSABLE: { status: 422, message: "No safe, usable wall surface was found. Regenerate this scene.", retryable: true },
+  SINGLE_MOCKUP_TEST_REQUIRED: { status: 400, message: "Wall-mask test mode accepts exactly one scene.", retryable: false },
   WALL_COMPOSITING_FAILED: { status: 502, message: "The original wallpaper could not be composited onto the generated wall.", retryable: true },
 };
 
@@ -31,19 +37,23 @@ export async function POST(request: Request) {
     const input = await request.json() as CreateMockupBatchRequest;
     if (config.provider === "fal") {
       if (!input.source.sourceDataUrl) throw new Error("SOURCE_IMAGE_REQUIRED");
-      if (![1, 6].includes(input.scenes.length) || input.scenes.some((scene) => !scene.prompt.trim())) throw new Error("INVALID_SCENE_PLAN");
+      if (config.falSingleMockupTest && input.scenes.length !== 1) throw new Error("SINGLE_MOCKUP_TEST_REQUIRED");
+      if ((!config.falSingleMockupTest && ![1, 6].includes(input.scenes.length)) || input.scenes.some((scene) => !scene.prompt.trim())) throw new Error("INVALID_SCENE_PLAN");
       console.info("[render-api] provider selected", { provider: config.provider, model: config.falModel, sceneIds: input.scenes.map((scene) => scene.sceneId) });
       const createdAt = new Date().toISOString();
       const jobId = `fal-batch-${crypto.randomUUID()}`;
-      const falAdapter = createFalRenderAdapter(config); const compositor = new SourcePreservingWallpaperCompositor();
+      const falAdapter = createFalRenderAdapter(config); const wallSegmenter = createFalWallSegmentationAdapter(config); const compositor = new SourcePreservingWallpaperCompositor();
       const outputs = await Promise.all(input.scenes.map(async (scene) => {
         const generated = await falAdapter.renderScene(scene);
         const sceneResponse = await fetch(generated.imageUrl).catch(() => { throw new Error("SCENE_IMAGE_DOWNLOAD_FAILED"); });
         if (!sceneResponse.ok) throw new Error("SCENE_IMAGE_DOWNLOAD_FAILED");
+        const segmented = await wallSegmenter.detectWall(generated.imageUrl, scene.sceneId);
+        const maskResponse = await fetch(segmented.maskUrl).catch(() => { throw new Error("WALL_MASK_DOWNLOAD_FAILED"); });
+        if (!maskResponse.ok) throw new Error("WALL_MASK_DOWNLOAD_FAILED");
         console.info("[render-api] applying original wallpaper", { provider: config.provider, sceneId: scene.sceneId, providerJobId: generated.providerJobId });
         let composited;
-        try { composited = await compositor.composite({ sceneImage: Buffer.from(await sceneResponse.arrayBuffer()), sourceDataUrl: input.source.sourceDataUrl!, scene, productType: input.productType, patternScale: input.patternScale }); }
-        catch (error) { if (error instanceof Error && ["SOURCE_IMAGE_INVALID", "SOURCE_IMAGE_SIZE_INVALID", "SCENE_IMAGE_INVALID", "WALL_PERSPECTIVE_INVALID"].includes(error.message)) throw error; throw new Error("WALL_COMPOSITING_FAILED"); }
+        try { composited = await compositor.composite({ sceneImage: Buffer.from(await sceneResponse.arrayBuffer()), wallMask: Buffer.from(await maskResponse.arrayBuffer()), sourceDataUrl: input.source.sourceDataUrl!, productType: input.productType, patternScale: input.patternScale }); }
+        catch (error) { if (error instanceof Error && ["SOURCE_IMAGE_INVALID", "SOURCE_IMAGE_SIZE_INVALID", "SCENE_IMAGE_INVALID", "WALL_PERSPECTIVE_INVALID", "WALL_MASK_UNUSABLE"].includes(error.message)) throw error; throw new Error("WALL_COMPOSITING_FAILED"); }
         console.info("[render-api] quality check completed", { provider: config.provider, sceneId: scene.sceneId, wallStrategy: composited.wallStrategy });
         const outputUrl = `data:image/png;base64,${composited.bytes.toString("base64")}`;
         return { id: `fal-output-${generated.providerJobId}`, jobId, sceneId: scene.sceneId, slotId: scene.slotId, category: scene.category, status: "completed", prompt: scene.prompt, provider: "fal", providerJobId: generated.providerJobId, outputUrl, thumbnailUrl: outputUrl, storageKey: null, width: composited.width, height: composited.height, createdAt, error: null };
