@@ -1,136 +1,82 @@
 # AI Mockup Integration
 
-This document is the production handoff for Wallpaper AI Studio's mockup pipeline. The repository intentionally ships without a live AI credential, queue worker, segmentation service, compositor, or production object-storage implementation. Demo outputs are not production renders.
+This document describes what Wallpaper AI Studio currently implements and what remains before production deployment.
 
-## 1. Current architecture
+## Implemented local Fal pipeline
 
-The product already separates immutable source artwork, six render slots, render jobs, output assets, approval state, and export state. `lib/core/mockup-scenes.ts` owns the category and scene-blueprint system. `lib/core/mockup-request.ts` converts a project into the backend batch contract. `lib/core/mockup-api.ts` contains transport-safe types. Browser code talks only to `/api/wallpaper/mockups`; it never talks to an AI provider.
+With `RENDER_PROVIDER=fal`, the active flow is:
 
-The current development renderer remains in `app/StudioApp.tsx`. It uses Canvas to demonstrate distinct compositions and always marks outputs `productionReady=false`.
+1. The browser keeps the uploaded wallpaper as the immutable project source.
+2. `buildMockupBatchRequest()` selects the existing six category-specific scene blueprints and calls `buildMockupPrompt()` for each one.
+3. Each prompt asks Fal for a photorealistic room with a large, smooth, blank, unobstructed feature wall. It explicitly forbids generated wallpaper, murals, decals, wall art, text, windows, doors, panels, and moulding on that target surface.
+4. The browser reads the original upload bytes from its local `blob:` URL and sends them to the application backend as a validated `data:image/...;base64` source field. This request-scoped payload is not written to localStorage or logs and is never sent to Fal.
+5. The server-only `FalRenderAdapter` uses `@fal-ai/client` and the configurable `FAL_MODEL` to generate one room per requested slot.
+6. The server downloads each generated room and passes it, the original uploaded bytes, and the matching scene blueprint to the deterministic compositor.
+7. The compositor tiles a seamless pattern or maps a mural once, applies a projective homography into the selected wall quadrilateral, clips it to the wall mask, and uses scene luminance for basic light/shadow retention.
+8. Six completed PNG data URLs are returned to the existing result cards. Approve, Reject, Download, ZIP, and single-slot Regenerate remain available.
 
-## 2. Mock versus production rendering
+Fal mode never calls the browser Canvas placeholder renderer. Provider, source, scene-download, perspective, or compositor errors are returned as safe failures instead of falling back to mock output.
 
-- `RENDER_PROVIDER=mock` or `DEMO_MODE=true`: the public config endpoint returns demo mode and the existing local Canvas renderer is used.
-- `RENDER_PROVIDER=fal` or `custom`, `DEMO_MODE=false`, and all required server configuration present: the frontend submits a backend batch and polls its status. Canvas is not used.
-- If production mode is selected but configuration is incomplete, the backend returns an explicit configuration error. It never falls back to Canvas.
-- Production API jobs remain queued until a real queue worker is connected. The repository does not pretend that a provider completed work.
+## Provider and API boundaries
 
-Provider selection is implemented in `lib/server/render-provider.ts`. Provider secrets are read only in server modules.
+- `GET /api/render/health` is the Studio provider source of truth.
+- `POST /api/wallpaper/mockups` runs six Fal scenes for a new batch or one Fal scene for a selected-slot Regenerate.
+- `integrations/image-generation/fal.ts` contains the server-only Fal adapter.
+- `integrations/image-generation/wall-compositor.ts` contains the source-preserving compositor and `WallDetectionAdapter` interface.
+- `lib/core/mockup-scenes.ts` remains the category, blueprint, and prompt source of truth.
+- `RENDER_PROVIDER=mock` continues to use the explicitly labelled development renderer.
+- `RENDER_PROVIDER=custom` continues to use the existing external render-service boundary.
 
-## 3. Category → scene → prompt flow
+`FAL_KEY` is read only on the server. It is never returned by health/config endpoints, logged, added to localStorage, or included in the browser bundle.
 
-`MOCKUP_CATEGORIES` is the category source of truth. Each category defines visual direction, room type, furniture, props, architecture, lighting, mood, palette, and negative constraints. Six role blueprints define camera, lens, distance, height, composition, and wallpaper coverage.
+## Source transport and pixel preservation
 
-`buildMockupBatchRequest(project)` selects the six blueprints and calls `buildMockupPrompt()` once per scene. The production request therefore carries six distinct scene IDs, full blueprints, and six distinct prompts.
+The current local-development bridge accepts JPG, PNG, or WEBP source bytes up to 20 MB as a request-scoped data URL. The decoder samples final wallpaper pixels only from this uploaded source. Fal generates the room but never receives or redraws the product artwork.
 
-## 4. Mockup API contract
+For seamless products, the selected small/medium/large pattern scale controls deterministic repeat count. For murals, the source maps once across the selected wall. The geometry, motif arrangement, text, and illustration content come directly from the uploaded file. A deterministic illumination multiplier changes presentation brightness to match room light; it is not a generative edit.
 
-- `GET /api/wallpaper/mockups/config`: public-safe mode/provider readiness; never returns secrets.
-- `POST /api/wallpaper/mockups`: creates one six-slot batch with an idempotency key.
-- `GET /api/wallpaper/mockups/:jobId`: returns batch and per-slot status/output metadata.
-- `POST /api/wallpaper/mockups/:jobId/retry`: requeues only failed, explicitly retryable slots.
+This data-URL transport is not production object storage. Production must replace it with an authenticated upload/finalize endpoint, private bucket storage, server-side hash verification, ownership checks, expiring signed source URLs, and signed output URLs.
 
-Transport types live in `lib/core/mockup-api.ts`. The more detailed JSON example is in `docs/etsy-okulu-fal-mockup-contract.md`.
+## Current wall placement strategy
 
-## 5. Source artwork storage requirements
+Automatic wall segmentation is **not implemented**.
 
-Production requires `assetId`, `storageKey`, `signedSourceUrl`, `fileHash`, `mimeType`, `width`, and `height`. A browser `blob:` URL is accepted only by demo mode and must never be sent to a remote worker.
+`BlueprintWallRegionAdapter` currently returns one conservative normalized wall quadrilateral per existing scene role: hero, creative, close-up, wide, editorial, and perspective. Fal prompts are aligned with those roles and request an unobstructed blank feature wall. The compositor calculates an inverse projective homography from the source plane into that quadrilateral and uses the quadrilateral itself as the wall mask.
 
-Implement an authenticated upload/finalize route that writes the original bytes to a private bucket, calculates or verifies the hash server-side, records ownership, and returns an expiring source URL. Populate `DesignAsset.storageKey` and `DesignAsset.signedSourceUrl`. Refresh the signed URL when a queued worker starts rather than relying on a URL that may expire while waiting.
+This temporary strategy cannot understand unexpected windows, furniture, people, plants, mirrors, or other foreground occlusion. It reduces overlap by reserving upper wall regions and instructing Fal to keep furniture below or beside the target wall, but it does not claim true semantic segmentation.
 
-## 6. AI scene-generation pipeline
+`WallDetectionAdapter` is the explicit replacement boundary for a future segmentation/depth service. A production detector must return a validated wall mask, planar geometry or depth, and foreground occlusion masks. Scenes without a large usable wall must be rejected and regenerated.
 
-The required production stages are:
+## Status and execution model
 
-1. Load and verify the immutable source record.
-2. Generate a photorealistic interior scene from the category/scene prompt. Prefer a neutral or clean target wall.
-3. Detect and validate a suitable wall/surface.
-4. Derive mask, perspective, depth, and occlusion information.
-5. Apply the original wallpaper deterministically.
-6. Blend illumination, shadows, surface texture, and foreground occlusion without changing source colors or motifs.
-7. Run automated quality checks.
-8. Store the final output privately and issue signed output/thumbnail URLs.
+The existing contract supports `queued`, `generating_scene`, `detecting_wall`, `compositing_wallpaper`, `quality_check`, `completed`, and `failed`. The current local Fal endpoint performs the six generations and composites synchronously. Safe server logs mark provider selection, Fal request start/completion/failure, wallpaper application, wall strategy, and quality-check completion without logging prompts, source bytes, or credentials.
 
-## 7. Fal/provider integration point
+Durable intermediate status polling is not implemented yet. Production must move work into a queue/worker and persist every stage independently so browser refreshes and server restarts cannot lose jobs.
 
-`integrations/image-generation/index.ts` defines provider-facing interfaces. `RealRenderAdapter` calls a private render service, not Fal directly. The service receives the full source descriptor, scene blueprint, generated prompt, placement rules, output profile, and explicit pipeline/source policy.
+## Regenerate behavior
 
-This boundary allows Fal, another image provider, wall segmentation, and the deterministic compositor to be deployed independently from the web application.
+Regenerate submits only the selected slot. The existing slot version chooses the next blueprint variant for the same scene role, one new Fal room is generated, and the same original source artwork is composited again. Other completed slots are not regenerated or rebilled.
 
-## 8. Wallpaper preservation/compositing pipeline
+## Still required before production deployment
 
-The AI provider must primarily generate the interior. It must not redraw the wallpaper as the final product surface. The exact source bytes are applied after scene generation. Optional reference-image conditioning may help scene planning but cannot replace deterministic compositing.
+1. Authenticated source upload/finalize endpoints and private object storage.
+2. Server-side source hash verification and project/source/job/output ownership enforcement.
+3. Durable batch/output repositories and a real queue/worker.
+4. Fal queue submit/status/webhook persistence instead of synchronous API execution.
+5. Automatic wall segmentation and wall suitability validation.
+6. Depth-aware mapping for non-planar or complex surfaces.
+7. Foreground occlusion masks for furniture, fixtures, people, plants, and decor.
+8. Automated source-fidelity, color-delta, repeat-seam, coverage, and perspective QA.
+9. Private intermediate/output storage, retention policies, thumbnails, and signed downloads.
+10. Rate limits, request-size enforcement at the edge, retry/idempotency hardening, and production observability.
 
-Preserve motif identity, color values, line work, repeat geometry, scale, and mural composition. Record the source hash on every job and output. Recommended QA includes source color delta, feature matching, repeat-seam checks, wall coverage, occlusion percentage, and perspective plausibility.
-
-## 9. Wall mask, depth, and perspective requirements
-
-The production worker needs a wall mask plus either a planar homography or depth-aware surface mapping. It also needs foreground/occlusion masks for furniture and fixtures. Reject scenes with no sufficiently large wall, severe obstruction, impossible geometry, or windows/doors occupying the product area. A manual mask-correction workflow can be added later without changing the API contract.
-
-## 10. Queue/worker architecture
-
-`MockupJobQueue` and `MockupJobRepository` are defined in `lib/server/mockup-jobs.ts`. Their development implementations are intentionally process-local and non-executing. `drizzle/0003_ai_mockup_architecture.sql` and `db/schema.ts` define durable batch/output storage for the production repository. Connect those tables to Cloudflare Queues, SQS, or an equivalent system.
-
-Each output moves independently through `queued`, `generating_scene`, `detecting_wall`, `compositing_wallpaper`, `quality_check`, `completed`, or `failed`. The worker must update aggregate batch status, persist provider job IDs, use idempotency keys, and make retry safe from duplicate billing.
-
-## 11. Storage architecture
-
-Use a private bucket for source artwork, intermediate scenes, masks/depth maps, full outputs, and thumbnails. Database rows store ownership and storage keys; public responses contain only short-lived signed URLs. Do not expose internal bucket paths or provider responses. Define retention rules for intermediates separately from approved source and final assets.
-
-## 12. Environment variables
+## Environment
 
 - `RENDER_PROVIDER=mock|fal|custom`
-- `DEMO_MODE=true|false`
-- `RENDER_SERVICE_URL` and `RENDER_SERVICE_TOKEN`: private worker/service boundary.
-- `FAL_KEY` and `FAL_MODEL`: server-only Fal configuration used by the future render service.
-- `STORAGE_PROVIDER` and `STORAGE_BUCKET`: private object storage.
-- `SOURCE_URL_TTL_SECONDS`: source URL lifetime.
-- `MOCKUP_QUEUE_NAME`: production queue identifier.
-- `OUTPUT_PROFILE`, `OUTPUT_JPEG_QUALITY`, and `EXPORT_SIGNING_SECRET`: output and delivery configuration.
+- `FAL_KEY`: server-only Fal credential
+- `FAL_MODEL`: configurable model ID; current default is `fal-ai/flux-2`
+- `RENDER_SERVICE_URL` and `RENDER_SERVICE_TOKEN`: custom provider boundary
+- `STORAGE_PROVIDER` and `STORAGE_BUCKET`: future private storage
+- `MOCKUP_QUEUE_NAME`: future durable queue
 
-Never use a `NEXT_PUBLIC_` prefix for secrets.
-
-## 13. Security requirements
-
-Authenticate every create/status/retry request. Derive the user ID from the server session rather than trusting the request body. Verify project, source, job, slot, and output ownership. Encrypt provider credentials at rest. Redact provider headers and raw responses from logs. Apply rate limits, input size/type validation, SSRF-safe signed URL handling, idempotency, and expiring downloads.
-
-The current routes define the integration boundary but use demo identity data and process-local state; authentication and durable repositories are activation blockers.
-
-## 14. Frontend job/status flow
-
-The frontend reads the public config endpoint. Demo mode runs Canvas. Production mode posts the six-scene batch, stores the returned job, and polls status. UI labels map stages to Queued, Generating scene, Applying wallpaper, Quality check, Completed, and Failed. Completed signed URLs become normal output assets, preserving Approve, Reject, Download, and export behavior.
-
-## 15. Retry and error handling
-
-Only failed outputs with `error.retryable=true` may be retried. A retry retains category, scene role, source asset identity, and source hash while allowing a new blueprint variation/seed. Map provider timeouts, rate limits, insufficient credit, unsafe output, missing wall, compositor failure, and QA rejection to stable public error codes. Never expose provider payloads or credentials.
-
-## 16. Exact TODO list to activate real AI generation
-
-1. Add authenticated source upload/finalize endpoints and durable source metadata.
-2. Replace the development job repository with the production database.
-3. Replace the no-op development queue with a real queue producer.
-4. Implement the render worker and private service `/v1/render` endpoint.
-5. Select and integrate an interior scene-generation model.
-6. Implement provider submit/status/webhook handling and persist provider job IDs.
-7. Implement wall segmentation, depth/perspective, and occlusion extraction.
-8. Implement deterministic source compositing with libvips/ImageMagick/OpenCV or an equivalent engine.
-9. Implement source-preservation and scene-quality checks.
-10. Add private intermediate/output storage and signed URL refresh.
-11. Add authentication, ownership enforcement, rate limits, and encrypted credential lookup.
-12. Add durable worker integration tests and real-provider contract tests.
-13. Configure production environment variables and set `DEMO_MODE=false` only after the complete pipeline passes QA.
-
-## HOW TO CONNECT FAL
-
-Do not add `FAL_KEY` to client code. Implement Fal inside the private render service or a server-only provider module behind `SceneGenerationProvider`.
-
-1. Choose a Fal model suitable for photorealistic interior generation and record its exact model ID in `FAL_MODEL`.
-2. In the render worker, translate `MockupSceneInput.prompt` and `blueprint` into that model's inputs.
-3. Submit one provider job per slot with the slot idempotency key; save the returned provider job ID.
-4. Use Fal's supported webhook or status API to advance `generating_scene` to the next stage.
-5. Store the generated room scene privately. Do not treat it as the final mockup.
-6. Run wall detection and deterministic original-wallpaper compositing.
-7. Run QA, store final/thumbnail files, and return only signed URLs.
-8. Map Fal errors to stable public error codes and mark retryability explicitly.
-
-If reference conditioning is supported, pass the wallpaper only as optional context. The final visible wallpaper must still come from the immutable stored source during compositing.
+Never use a `NEXT_PUBLIC_` prefix for provider credentials.

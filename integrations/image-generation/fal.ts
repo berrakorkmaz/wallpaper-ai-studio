@@ -40,7 +40,7 @@ export class FalRenderAdapter {
     try {
       console.info("[fal-render] request started", { provider: this.provider, model: this.model, sceneId: scene.sceneId });
       const generation = this.client.subscribe(this.model, {
-        input: { prompt: scene.prompt, image_size: "square_hd", num_images: 1, output_format: "jpeg", enable_safety_checker: true },
+        input: { prompt: scene.prompt, image_size: "square_hd", num_images: 1, output_format: "png", enable_safety_checker: true },
         logs: false,
       });
       const result = await Promise.race([

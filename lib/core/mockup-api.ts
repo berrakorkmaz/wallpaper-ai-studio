@@ -12,6 +12,7 @@ export type SourceWallpaperAsset = {
   mimeType: string;
   width: number;
   height: number;
+  sourceDataUrl?: string;
 };
 
 export type MockupSceneInput = {
