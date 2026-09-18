@@ -75,7 +75,7 @@ All values in `.env.example` are intentionally empty.
 | `EXPORT_SIGNING_SECRET` | Secret used to sign expiring download URLs |
 | `OUTPUT_PROFILE` | Central output profile; defaults to `ETSY_MOCKUP_SQUARE` |
 | `FAL_KEY` | Server-only Fal.ai credential |
-| `FAL_MODEL` | Fal.ai scene-generation model used before source-preserving compositing |
+| `FAL_MODEL` | Optional Fal.ai smoke-test model; defaults to `fal-ai/flux-2` |
 | `OUTPUT_JPEG_QUALITY` | JPEG quality; defaults to `93` |
 | `DEMO_MODE` | `true` keeps all external calls mocked |
 
@@ -140,8 +140,11 @@ The repository does not contain a real key, shared secret, token, shop ID, callb
 ## Render providers
 
 - `RENDER_PROVIDER=mock` uses the development renderer. It creates 3000 × 3000 browser-downloadable previews but always records `productionReady=false`.
-- `RENDER_PROVIDER=fal` or `custom` calls the server-side scene/compositing boundary in `integrations/image-generation`. A valid result must match the central 3000 × 3000 JPG profile and retain the approved source asset ID/hash.
+- `RENDER_PROVIDER=fal` runs a temporary one-image, server-side real scene smoke test through `@fal-ai/client`. It uses the selected category's first existing scene blueprint and does not yet composite the uploaded wallpaper.
+- `RENDER_PROVIDER=custom` calls the existing external scene/compositing boundary in `integrations/image-generation`.
 - The real provider receives a strict `mask-perspective-displacement-composite-only` source policy. It must not use generative image synthesis on the wallpaper artwork.
+
+For the local smoke test, create `.env.local` with `RENDER_PROVIDER=fal`, `FAL_KEY=<your server-side key>`, and optionally `FAL_MODEL=fal-ai/flux-2`. Start with `npm run dev`, verify `GET /api/render/health` returns `{ "provider": "fal", "configured": true }`, upload an artwork, select a category, continue to confirmation, and choose **1 Real AI Scene Test Oluştur**. Never commit `.env.local`.
 
 The real renderer should operate through a queue and private object storage. Recommended building blocks are Cloudflare Queues + R2, AWS SQS + S3, or an equivalent worker and object-store combination. ImageMagick/libvips/OpenCV can implement masks, perspective transforms, displacement maps, controlled lighting and color-safe compositing.
 

@@ -6,7 +6,7 @@ async function json<T>(response: Response): Promise<T> {
   return body as T;
 }
 
-export async function getPublicRenderConfig() { return json<{ mode: "demo" | "production"; provider: "mock" | "fal" | "custom"; productionReady: boolean; missingConfiguration: string[] }>(await fetch("/api/wallpaper/mockups/config", { cache: "no-store" })); }
+export async function getPublicRenderConfig() { return json<{ mode: "demo" | "production"; provider: "mock" | "fal" | "custom"; productionReady: boolean; falConfiguration: "ready" | "missing" | "not-selected"; missingConfiguration: string[] }>(await fetch("/api/wallpaper/mockups/config", { cache: "no-store" })); }
 export async function createMockupBatch(input: CreateMockupBatchRequest) { return json<CreateMockupBatchResponse>(await fetch("/api/wallpaper/mockups", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(input) })); }
 export async function getMockupBatch(jobId: string) { return json<MockupBatchStatus>(await fetch(`/api/wallpaper/mockups/${encodeURIComponent(jobId)}`, { cache: "no-store" })); }
 export async function retryMockupSlots(jobId: string, input: RetryMockupSlotsRequest) { return json<MockupBatchStatus>(await fetch(`/api/wallpaper/mockups/${encodeURIComponent(jobId)}/retry`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(input) })); }

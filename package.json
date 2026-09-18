@@ -17,6 +17,7 @@
     "scan:secrets": "node scripts/secret-scan.mjs"
   },
   "dependencies": {
+    "@fal-ai/client": "^1.10.1",
     "drizzle-orm": "0.45.2",
     "jszip": "^3.10.2",
     "next": "^16.3.5",
