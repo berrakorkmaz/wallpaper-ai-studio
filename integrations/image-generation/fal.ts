@@ -67,7 +67,7 @@ export class FalRenderAdapter {
 
   generateInteriorScene(scene: MockupSceneInput) {
     if (!scene.prompt.trim()) throw new Error("FAL_INVALID_PROMPT");
-    return this.request(this.sceneModel, { prompt: scene.prompt, image_size: "square_hd", output_format: "jpeg", enable_safety_checker: true }, scene.sceneId, "scene");
+    return this.request(this.sceneModel, { prompt: scene.prompt, seed: scene.generationSeed, image_size: "square_hd", output_format: "jpeg", enable_safety_checker: true }, scene.sceneId, "scene");
   }
 
   applyWallpaperWithFal(input: { scene: MockupSceneInput; sceneImageUrl: string; wallpaperDataUrl: string; prompt: string }) {

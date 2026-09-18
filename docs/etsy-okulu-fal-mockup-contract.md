@@ -84,7 +84,7 @@ Response (`200`):
 }
 ```
 
-Allowed public statuses: `queued`, `generating_scene`, `detecting_wall`, `compositing_wallpaper`, `quality_check`, `completed`, `failed`.
+Allowed public statuses: `queued`, `generating_scene`, `applying_wallpaper`, `detecting_wall`, `compositing_wallpaper`, `quality_check`, `completed`, `failed`. The active Fal path uses `generating_scene` and `applying_wallpaper`; mask/compositing statuses remain only for the isolated legacy custom-provider contract.
 
 ## POST `/api/wallpaper/mockups/:jobId/retry`
 
@@ -127,4 +127,4 @@ Suggested codes: `UNAUTHENTICATED`, `RESOURCE_NOT_FOUND`, `FAL_CONNECTION_REQUIR
 
 ## Source preservation
 
-The production adapter must use the approved master asset as the exact source for every slot. It may apply masking, perspective, displacement, controlled cropping, repeat scale, shadows, and lighting. It must not ask a generative model to redraw or reinterpret the wallpaper pattern.
+The active Fal adapter sends the generated clean interior as Image 1 and the approved original wallpaper as Image 2 to `fal-ai/flux-2-pro/edit`. The preservation prompt requires the wallpaper's colors, motifs, characters, proportions and identity to remain faithful while the model handles wall perspective, lighting and foreground occlusion. No browser or server-side rectangle/mask compositor runs after the edit.

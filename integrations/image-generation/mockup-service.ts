@@ -13,12 +13,13 @@ export class FalMockupService {
   private readonly adapter: FalRenderAdapter;
   constructor(adapter: FalRenderAdapter) { this.adapter = adapter; }
 
-  async generateMockup(input: { scene: MockupSceneInput; wallpaperDataUrl: string; productType: ProductType; patternScale: PatternScale | null }) {
+  async generateMockup(input: { scene: MockupSceneInput; wallpaperDataUrl: string; productType: ProductType; patternScale: PatternScale | null }, onStage?: (stage: "applying_wallpaper") => void) {
     const encoded = input.wallpaperDataUrl.match(/^data:image\/(?:png|jpeg|jpg|webp);base64,([A-Za-z0-9+/]+={0,2})$/i)?.[1];
     if (!encoded) throw new Error("SOURCE_IMAGE_INVALID");
     const padding = encoded.endsWith("==") ? 2 : encoded.endsWith("=") ? 1 : 0;
     if (Math.floor(encoded.length * 3 / 4) - padding > 20 * 1024 * 1024) throw new Error("SOURCE_IMAGE_SIZE_INVALID");
     const interior = await this.adapter.generateInteriorScene(input.scene);
+    onStage?.("applying_wallpaper");
     const final = await this.adapter.applyWallpaperWithFal({
       scene: input.scene,
       sceneImageUrl: interior.imageUrl,

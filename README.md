@@ -4,7 +4,7 @@ Open-source workflow for generating wallpaper prompts, production masters, categ
 
 Wallpaper AI Studio turns one uploaded wallpaper artwork into a controlled Etsy mockup workflow. The core application works without Etsy: choose a seamless pattern or custom mural, upload and validate immutable source artwork, direct six independent room mockups, prepare marketplace copy, and download focused or complete ZIP packages. Prompt Studio remains optional.
 
-> The public demo uses the clearly labeled development renderer. Its previews are not marked production-ready. A real mask/perspective/displacement compositing service must be connected for commercial scene renders. Etsy remains optional and draft-only.
+> The public demo uses the clearly labeled development renderer. Its previews are not marked production-ready. `RENDER_PROVIDER=fal` enables the server-only two-stage FLUX.2 production pipeline. Etsy remains optional and draft-only.
 
 ## Features
 
@@ -144,7 +144,7 @@ The repository does not contain a real key, shared secret, token, shop ID, callb
 - `RENDER_PROVIDER=fal` runs a server-only two-stage pipeline through `@fal-ai/client`: category-driven clean interior generation followed by `fal-ai/flux-2-pro/edit` with the interior as Image 1 and the original wallpaper as Image 2. The Fal-edited image is the final mockup; no Canvas or rectangle compositor is used.
 - `RENDER_PROVIDER=custom` calls the existing external scene/compositing boundary in `integrations/image-generation`.
 
-For the local test, create `.env.local` with `RENDER_PROVIDER=fal`, `FAL_KEY=<your server-side key>`, and optionally `FAL_MODEL=fal-ai/flux-2` plus `FAL_EDIT_MODEL=fal-ai/flux-2-pro/edit`. Start with `npm run dev`, verify `GET /api/render/health` returns `{ "provider": "fal", "configured": true }`, upload an artwork, select a category, continue to confirmation, and choose **1 Test Mockup Oluştur**. Never commit `.env.local`.
+For local production testing, create `.env.local` with `RENDER_PROVIDER=fal`, `FAL_KEY=<your server-side key>`, and optionally `FAL_MODEL=fal-ai/flux-2` plus `FAL_EDIT_MODEL=fal-ai/flux-2-pro/edit`. Start with `npm run dev`, verify `GET /api/render/health` returns `{ "provider": "fal", "configured": true }`, upload an artwork, select a category, continue to confirmation, and choose **6 Mockup Oluştur →**. The UI runs two slots at a time, shows real stage/completion updates, preserves successful partial results, and retries only the selected failed slot. Never commit `.env.local`.
 
 The current local test uses a request-scoped source data URI. A scaled production deployment should use authenticated private object storage and expiring signed URLs while preserving the same two-reference edit contract. The active Fal architecture is documented in [`docs/AI-MOCKUP-INTEGRATION.md`](docs/AI-MOCKUP-INTEGRATION.md).
 

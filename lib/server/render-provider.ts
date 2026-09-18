@@ -10,7 +10,6 @@ export type ServerRenderConfig = {
   serviceToken: string;
   falModel: string;
   falEditModel: string;
-  falSingleMockupTest: boolean;
   falConfigured: boolean;
   productionReady: boolean;
   missing: string[];
@@ -24,9 +23,8 @@ export function getServerRenderConfig(env: NodeJS.ProcessEnv = process.env): Ser
   const serviceToken = env.RENDER_SERVICE_TOKEN?.trim() ?? "";
   const falModel = env.FAL_MODEL?.trim() || DEFAULT_FAL_SCENE_MODEL;
   const falEditModel = env.FAL_EDIT_MODEL?.trim() || DEFAULT_FAL_EDIT_MODEL;
-  const falSingleMockupTest = env.FAL_SINGLE_MOCKUP_TEST !== "false";
   const missing = provider === "mock" ? [] : provider === "fal" ? [!env.FAL_KEY?.trim() && "FAL_KEY"].filter(Boolean) as string[] : [!serviceUrl && "RENDER_SERVICE_URL", !serviceToken && "RENDER_SERVICE_TOKEN"].filter(Boolean) as string[];
-  return { provider, demoMode: provider === "fal" ? false : demoMode, serviceUrl, serviceToken, falModel, falEditModel, falSingleMockupTest, falConfigured: provider === "fal" && !missing.length, productionReady: provider === "fal" ? !missing.length : !demoMode && provider !== "mock" && !missing.length, missing };
+  return { provider, demoMode: provider === "fal" ? false : demoMode, serviceUrl, serviceToken, falModel, falEditModel, falConfigured: provider === "fal" && !missing.length, productionReady: provider === "fal" ? !missing.length : !demoMode && provider !== "mock" && !missing.length, missing };
 }
 
 export function createFalRenderAdapter(config = getServerRenderConfig(), env: NodeJS.ProcessEnv = process.env) {
@@ -50,5 +48,5 @@ export function createServerRenderAdapter(config = getServerRenderConfig()): Ren
 
 export function publicRenderConfig(config = getServerRenderConfig()) {
   const mode = !config.demoMode && config.provider !== "mock" ? "production" as const : "demo" as const;
-  return { mode, provider: config.provider, productionReady: config.productionReady, falConfiguration: config.provider === "fal" ? config.falConfigured ? "ready" as const : "missing" as const : "not-selected" as const, falSingleMockupTest: config.provider === "fal" && config.falSingleMockupTest, missingConfiguration: config.missing };
+  return { mode, provider: config.provider, productionReady: config.productionReady, falConfiguration: config.provider === "fal" ? config.falConfigured ? "ready" as const : "missing" as const : "not-selected" as const, missingConfiguration: config.missing };
 }

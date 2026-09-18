@@ -34,4 +34,13 @@ export function completeRenderJob(project: Project, jobId: string, output: Outpu
   };
 }
 
+export function failRenderJob(project: Project, slotId: string, errorCode: string) {
+  const slot = project.slots.find((item) => item.id === slotId);
+  if (!slot?.activeJobId) return project;
+  return { ...project,
+    renderJobs: project.renderJobs.map((job) => job.jobId === slot.activeJobId ? { ...job, status: "FAILED" as const, errorCode, completedAt: new Date().toISOString() } : job),
+    slots: project.slots.map((item) => item.id === slotId ? { ...item, status: "failed" as const } : item),
+  };
+}
+
 export function approveOutput(project: Project, assetId: string, approved: boolean) { return { ...project, outputAssets: project.outputAssets.map((asset) => asset.id === assetId ? { ...asset, approved, rejected: !approved } : asset) }; }

@@ -2,7 +2,7 @@ import type { ArtworkPlacementMode, PatternScale, ProductType } from "./types.ts
 import type { MockupCategoryId, SceneBlueprint } from "./mockup-scenes.ts";
 
 export type MockupProviderId = "mock" | "fal" | "custom";
-export type MockupJobStage = "queued" | "generating_scene" | "detecting_wall" | "compositing_wallpaper" | "quality_check" | "completed" | "failed";
+export type MockupJobStage = "queued" | "generating_scene" | "applying_wallpaper" | "detecting_wall" | "compositing_wallpaper" | "quality_check" | "completed" | "failed";
 
 export type SourceWallpaperAsset = {
   assetId: string;
@@ -18,6 +18,7 @@ export type SourceWallpaperAsset = {
 export type MockupSceneInput = {
   slotId: string;
   sceneId: string;
+  generationSeed: number;
   category: MockupCategoryId;
   prompt: string;
   blueprint: SceneBlueprint;
@@ -72,7 +73,7 @@ export type MockupApiError = {
   error: { code: string; message: string; retryable: boolean };
 };
 
-export const MOCKUP_JOB_STAGES: MockupJobStage[] = ["queued", "generating_scene", "detecting_wall", "compositing_wallpaper", "quality_check", "completed", "failed"];
+export const MOCKUP_JOB_STAGES: MockupJobStage[] = ["queued", "generating_scene", "applying_wallpaper", "detecting_wall", "compositing_wallpaper", "quality_check", "completed", "failed"];
 
 export function isProductionSourceAsset(source: Partial<SourceWallpaperAsset> | null | undefined): source is SourceWallpaperAsset {
   return Boolean(source?.assetId && source.storageKey && source.signedSourceUrl && source.fileHash && source.mimeType && source.width && source.height);

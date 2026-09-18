@@ -8,9 +8,9 @@ Workflow completion is derived from project records, never navigation history. R
 
 Prompt Studio is optional. `artworkSource=user_upload` records the step as skipped rather than completed, removes prompt requirements from later gates, and stores the source label in project export metadata. Uploaded artwork still passes the identical master QA and versioning pipeline.
 
-## Renderer boundary
+## Renderer boundaries
 
-`MockRenderAdapter` is development-only and returns `productionReady=false`. `RealRenderAdapter` calls a private queue/compositing endpoint, forwards an idempotency key and validates the returned dimensions and format. The provider must apply the approved source by wall mask, perspective/scale transform, displacement, texture blending, controlled lighting and color-safe compositing. Generative redraw of the wallpaper is prohibited.
+`MockRenderAdapter` is development-only and returns `productionReady=false`. The active `RENDER_PROVIDER=fal` path is server-only and uses `fal-ai/flux-2` for each clean interior followed by `fal-ai/flux-2-pro/edit` with the interior and original wallpaper as ordered references. Six slots run with controlled concurrency, real streamed stages and slot-level failure isolation. `RealRenderAdapter` and its external compositing boundary remain isolated behind `RENDER_PROVIDER=custom` for backward compatibility.
 
 ## Output profiles
 
@@ -28,6 +28,7 @@ Every export is modeled as a user-owned job. Production storage paths must begin
 - Auth provider capable of producing a stable server-side user ID.
 - SQLite/Postgres database and application of both migrations.
 - Private R2/S3-compatible object storage.
-- Queue/worker-based compositing service using libvips, ImageMagick or OpenCV.
+- Server-side Fal credential and sufficient provider credit.
+- Durable job/queue infrastructure for deployment-scale resumability; local production currently streams request-scoped slot progress.
 - Signed URL implementation backed by `EXPORT_SIGNING_SECRET`.
 - Optional Etsy OAuth adapter; draft-only, never publish.

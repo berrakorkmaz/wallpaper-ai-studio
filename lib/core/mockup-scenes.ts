@@ -1,6 +1,6 @@
 import type { Project, RenderSlot } from "./types.ts";
 
-export const MOCKUP_CATEGORIES = ["Nursery", "Kids Room", "Disney", "Living Room", "Bedroom", "Gaming Room", "Office / Studio", "Bathroom / Powder", "Dining / Entryway"] as const;
+export const MOCKUP_CATEGORIES = ["Nursery", "Kids Room", "Disney", "Living Room", "Bedroom", "Gaming Room", "Office / Studio", "Bathroom / Powder", "Dining / Entryway", "Dark / Moody Interior", "Minimal Interior", "Luxury Interior", "Commercial Interior"] as const;
 export type MockupCategoryId = typeof MOCKUP_CATEGORIES[number];
 export type SceneRoleId = "hero" | "creative" | "closeup" | "wide" | "editorial" | "perspective";
 
@@ -28,6 +28,10 @@ const directions: Record<MockupCategoryId, CategoryDirection> = {
   "Office / Studio": { visualDirection: "focused creative workspace with gallery restraint", roomType: "creative office studio", furnitureStyle: "clean-lined studio furniture", furniture: [["large work desk", "task chair"], ["drafting table", "storage credenza"]], props: ["desk lamp", "material samples", "design books"], architectures: ["industrial loft window", "built-in shelving bay"], lighting: ["clear north-facing daylight", "focused task lighting"], mood: "calm and productive", palette: ["#ded9ce", "#9b8c77", "#647576", "#3f4746"], negativeConstraints: ["corporate cubicle", "bedroom furniture", "toy-room styling"] },
   "Bathroom / Powder": { visualDirection: "jewel-box bathroom with moisture-safe styled walls", roomType: "boutique powder room", furnitureStyle: "compact crafted bathroom fixtures", furniture: [["floating vanity", "round mirror"], ["pedestal basin", "slim cabinet"]], props: ["hand towel", "glass vessel", "small botanical"], architectures: ["arched mirror niche", "fluted-glass partition"], lighting: ["soft skylight", "warm sculptural sconce light"], mood: "polished and intimate", palette: ["#d9d2c6", "#8da09a", "#b08769", "#454e4d"], negativeConstraints: ["living-room seating", "visible shower over wallpaper", "sterile empty showroom"] },
   "Dining / Entryway": { visualDirection: "architectural hospitality space for arrivals and gathering", roomType: "dining room and entry gallery", furnitureStyle: "statement furniture with crafted silhouettes", furniture: [["dining table", "six chairs"], ["console table", "sculptural bench"]], props: ["pendant light", "ceramic bowl", "tall branches"], architectures: ["arched doorway sequence", "double-height stair hall"], lighting: ["directional dining daylight", "warm evening pendant light"], mood: "sociable and dramatic", palette: ["#ddd2bd", "#9b765d", "#65746b", "#4b403c"], negativeConstraints: ["bedroom furniture", "gaming setup", "empty corridor"] },
+  "Dark / Moody Interior": { visualDirection: "cinematic dark interior with sophisticated tonal layering", roomType: "moody designer lounge", furnitureStyle: "low sculptural furniture in rich tactile materials", furniture: [["low velvet sofa", "stone coffee table"], ["leather lounge chair", "dark timber console"]], props: ["smoked-glass lamp", "bronze object", "tonal art books"], architectures: ["deep window reveal", "textured ceiling cove"], lighting: ["low raking window light", "controlled warm pool lighting"], mood: "cinematic and intimate", palette: ["#252724", "#51463e", "#786757", "#b09678"], negativeConstraints: ["crushed black shadows", "nightclub neon", "bright nursery styling"] },
+  "Minimal Interior": { visualDirection: "quiet contemporary minimalism with precise negative space", roomType: "minimal architectural interior", furnitureStyle: "few refined pieces with pure silhouettes", furniture: [["low linen sofa", "monolithic side table"], ["slim lounge chair", "floating console"]], props: ["single ceramic vessel", "linen throw", "small sculptural branch"], architectures: ["frameless window opening", "flush shadow-gap doorway"], lighting: ["diffuse north light", "soft late-morning side light"], mood: "calm and considered", palette: ["#ece8df", "#c5bbac", "#8b8d84", "#555b57"], negativeConstraints: ["clutter", "ornate furniture", "empty white studio backdrop"] },
+  "Luxury Interior": { visualDirection: "high-end residential editorial with bespoke detailing", roomType: "luxury residential salon", furnitureStyle: "bespoke upholstered furniture and polished natural materials", furniture: [["channel-tufted sofa", "marble cocktail table"], ["statement armchair", "custom lacquer console"]], props: ["handblown glass vase", "cashmere throw", "collector design books"], architectures: ["fluted stone portal", "full-height bronze-framed window"], lighting: ["luminous layered daylight", "warm gallery-grade evening light"], mood: "opulent and restrained", palette: ["#e2d7c8", "#aa8c70", "#6e7169", "#403b38"], negativeConstraints: ["gaudy gold overload", "generic hotel lobby", "cheap showroom staging"] },
+  "Commercial Interior": { visualDirection: "premium hospitality and retail interior with professional visual merchandising", roomType: "boutique commercial interior", furnitureStyle: "durable custom millwork and refined contract furniture", furniture: [["hospitality banquette", "pedestal tables"], ["display plinth", "tailored lounge chair"]], props: ["curated merchandise", "architectural pendant", "large botanical"], architectures: ["shopfront glazing bay", "ribbed service counter portal"], lighting: ["balanced storefront daylight", "layered hospitality accent lighting"], mood: "polished and memorable", palette: ["#d9d0c2", "#947862", "#69736d", "#343d3a"], negativeConstraints: ["residential bedroom furniture", "empty office cubicle", "visible brand logos or text"] },
 };
 
 const roleSpecs: Record<SceneRoleId, Pick<SceneBlueprint, "roleLabel" | "title" | "cameraAngle" | "cameraDistance" | "cameraHeight" | "lensStyle" | "composition" | "wallpaperCoverage">> = {
@@ -43,6 +47,9 @@ const slotRoles: Record<string, SceneRoleId> = { "Hero room": "hero", "Alternate
 const roleOrder: SceneRoleId[] = ["hero", "creative", "closeup", "wide", "editorial", "perspective"];
 const lightingTreatments = ["broad", "accent-led", "raking", "ambient", "soft directional", "architectural"];
 const furnitureArrangements = ["balanced hero grouping", "offset island grouping", "cropped detail grouping", "perimeter wide-room grouping", "layered foreground vignette", "depth-led diagonal grouping"];
+const architectureTreatments = ["centered feature-wall bay and balanced circulation", "asymmetric alcove and offset circulation", "tactile material junction seen at close range", "long sightline with generous floor area", "layered foreground threshold and styled niche", "corner return with clearly separated depth planes"];
+const propOrders = [[0, 1, 2], [1, 2, 0], [2, 0, 1], [0, 2, 1], [2, 1, 0], [1, 0, 2]];
+const cameraVariations = ["fresh left-to-right circulation", "fresh right-to-left circulation", "reconfigured focal axis", "alternate window orientation", "new foreground layering", "replanned architectural axis"];
 
 function categoryId(value: string): MockupCategoryId { return MOCKUP_CATEGORIES.includes(value as MockupCategoryId) ? value as MockupCategoryId : "Living Room"; }
 
@@ -51,13 +58,16 @@ export function sceneRoleForSlot(slot: Pick<RenderSlot, "role">): SceneRoleId { 
 export function getCategoryDirection(value: string) { const id = categoryId(value); return { id, ...directions[id] }; }
 
 export function getSceneBlueprint(category: string, role: SceneRoleId, variant = 0): SceneBlueprint {
-  const direction = getCategoryDirection(category); const spec = roleSpecs[role]; const v = Math.abs(variant) % 2; const roleIndex = roleOrder.indexOf(role); const selection = (roleIndex + v) % 2;
+  const direction = getCategoryDirection(category); const spec = roleSpecs[role]; const v = Math.abs(variant); const roleIndex = roleOrder.indexOf(role); const selection = (roleIndex + v) % 6;
+  const [primary, alternate] = direction.furniture;
+  const furnitureCombinations = [primary, alternate, [primary[0], alternate[1]], [alternate[0], primary[1]], [primary[0], alternate[0]], [primary[1], alternate[1]]];
+  const propOrder = propOrders[selection];
   return { id: `${direction.id.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-${role}-v${v + 1}`, role, ...spec, roomType: direction.roomType,
-    cameraAngle: v ? `${spec.cameraAngle}, mirrored circulation` : spec.cameraAngle,
-    composition: v ? `${spec.composition}; alternate furniture placement` : spec.composition,
-    furnitureStyle: `${direction.furnitureStyle}, ${furnitureArrangements[roleIndex]}`, keyFurniture: direction.furniture[selection],
-    props: selection ? [...direction.props].reverse() : direction.props, architecture: `${direction.architectures[selection]} with ${role === "perspective" ? "a visible wall return" : role === "wide" ? "an extended sightline" : "role-specific spatial framing"}`, lighting: `${lightingTreatments[roleIndex]} ${direction.lighting[selection]}`, mood: direction.mood,
-    palette: v ? [direction.palette[1], direction.palette[0], direction.palette[3], direction.palette[2]] : direction.palette,
+    cameraAngle: `${spec.cameraAngle}, ${cameraVariations[(roleIndex + v) % cameraVariations.length]}`,
+    composition: `${spec.composition}; ${furnitureArrangements[selection]}; floor plan iteration ${v + 1}`,
+    furnitureStyle: `${direction.furnitureStyle}, ${furnitureArrangements[selection]}`, keyFurniture: furnitureCombinations[selection],
+    props: propOrder.map((index) => direction.props[index]), architecture: `${direction.architectures[selection % direction.architectures.length]} with ${architectureTreatments[selection]}`, lighting: `${lightingTreatments[selection]} ${direction.lighting[selection % direction.lighting.length]}`, mood: direction.mood,
+    palette: v % 2 ? [direction.palette[1], direction.palette[0], direction.palette[3], direction.palette[2]] : direction.palette,
     negativeConstraints: [...direction.negativeConstraints, "do not cover most of the wallpaper", "do not distort or redraw the wallpaper artwork", "do not invent new motifs", "do not use an empty studio wall"], variant: v };
 }
 

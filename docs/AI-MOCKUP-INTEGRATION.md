@@ -28,11 +28,13 @@ There is no browser Canvas compositing, wall rectangle, hard-coded wall geometry
 
 `lib/core/mockup-scenes.ts` remains the category and scene source of truth. Categories change only room type, art direction, camera, furniture, composition, styling, and lighting for Stage A. Every category uses the same Stage B wallpaper-edit prompt and model contract.
 
-## Test mode and regeneration
+## Six-mockup production mode and regeneration
 
-`FAL_SINGLE_MOCKUP_TEST` defaults to `true`. In this mode both client and backend enforce exactly one mockup, so one click performs one interior generation and one final edit. Set it to `false` only after the result is approved; the existing six scene blueprints will then each run independently through the same two-stage pipeline.
+Production mode is the default. One click starts six independent scene blueprints through the same two-stage pipeline. The client uses controlled concurrency of two slots, consumes real NDJSON stage events, and displays each result as soon as that slot completes. The completed count is derived only from completed outputs; it is not timer-based or simulated.
 
-Regenerate submits only the selected slot. It creates one new room variation and one new edit while leaving all other slots unchanged.
+Each scene request receives a fresh random seed supported by `fal-ai/flux-2`. Camera, furniture combination and placement, architecture, props, lighting and composition are distinct across the six role blueprints. Initial generation always creates six independent slots; Retry and Regenerate intentionally submit one selected slot.
+
+Partial failures remain attached to their individual slot. Successful outputs are retained, and Retry or Regenerate submits only the selected slot. It creates one new room variation and random seed followed by one new edit while leaving all other slots unchanged.
 
 ## Source transport
 
@@ -46,6 +48,5 @@ For production scale, replace request-scoped data URIs with authenticated privat
 - `FAL_KEY`: server-only credential
 - `FAL_MODEL`: optional scene model; default `fal-ai/flux-2`
 - `FAL_EDIT_MODEL`: optional edit model; default `fal-ai/flux-2-pro/edit`
-- `FAL_SINGLE_MOCKUP_TEST=true|false`: defaults to `true`
 
 The Fal pipeline does not depend on `RENDER_SERVICE_URL`, `/v1/render`, or the legacy custom production service. The custom provider remains isolated for backward compatibility but is not used when `RENDER_PROVIDER=fal`.

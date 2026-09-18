@@ -3,6 +3,12 @@ import { buildMockupPrompt, getCategoryDirection, sceneBlueprintFor } from "./mo
 import type { CreateMockupBatchRequest } from "./mockup-api.ts";
 import type { Project } from "./types.ts";
 
+function generationSeed() {
+  const values = new Uint32Array(1);
+  crypto.getRandomValues(values);
+  return 1 + (values[0] % 2_147_483_646);
+}
+
 export function buildMockupBatchRequest(project: Project, slotIds = project.slots.map((slot) => slot.id), sourceDataUrl?: string): CreateMockupBatchRequest {
   const master = project.productionMaster; if (!master) throw new Error("SOURCE_ASSET_REQUIRED");
   const slots = project.slots.filter((slot) => slotIds.includes(slot.id));
@@ -13,7 +19,7 @@ export function buildMockupBatchRequest(project: Project, slotIds = project.slot
     source: { assetId: master.id, storageKey: master.storageKey ?? "", signedSourceUrl: master.signedSourceUrl ?? "", fileHash: master.fileHash, mimeType: master.mimeType, width: master.width, height: master.height, sourceDataUrl },
     productType: project.productType, patternScale: project.patternScale,
     placement: { mode: project.artworkPlacementMode, focalPoint: project.focalPoint },
-    scenes: slots.map((slot, index) => ({ slotId: slot.id, sceneId: blueprints[index].id, category, blueprint: blueprints[index], prompt: buildMockupPrompt({ project, sceneBlueprint: blueprints[index], previousScenes: blueprints.slice(0, index) }) })),
+    scenes: slots.map((slot, index) => ({ slotId: slot.id, sceneId: blueprints[index].id, generationSeed: generationSeed(), category, blueprint: blueprints[index], prompt: buildMockupPrompt({ project, sceneBlueprint: blueprints[index], previousScenes: blueprints.slice(0, index) }) })),
     output: { width: DEFAULT_OUTPUT_PROFILE.width, height: DEFAULT_OUTPUT_PROFILE.height, aspectRatio: `${DEFAULT_OUTPUT_PROFILE.width}:${DEFAULT_OUTPUT_PROFILE.height}`, format: "jpg", quality: DEFAULT_OUTPUT_PROFILE.quality },
     idempotencyKey: `${project.id}:${master.id}:batch:${Math.max(...slots.map((slot) => slot.version), 0) + 1}`,
   };
